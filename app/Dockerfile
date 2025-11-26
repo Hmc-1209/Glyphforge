@@ -1,27 +1,27 @@
-# 使用 Node.js 官方映像
+# Use official Node.js image
 FROM node:18-alpine
 
-# 設定工作目錄
+# Set working directory
 WORKDIR /app
 
-# 複製 package.json 和 package-lock.json
+# Copy package.json and package-lock.json
 COPY package*.json ./
 
-# 安裝依賴
+# Install dependencies
 RUN npm install
 
-# 複製所有應用程式檔案
+# Copy all application files
 COPY . .
 
-# 使用 Docker 專用的配置檔
+# Use Docker-specific configuration file
 RUN cp config.docker.json config.json
 
-# 建立 Vite 前端
+# Build Vite frontend
 RUN npm run build
 
-# 暴露端口
+# Expose ports
 EXPOSE 3001
 EXPOSE 5173
 
-# 啟動應用
+# Start application
 CMD ["npm", "start"]

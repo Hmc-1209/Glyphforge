@@ -8,7 +8,11 @@ services:
       - "3001:3001"
       - "5173:5173"
     volumes:
-      - D:/Glyphforge-data/prompt:/data/prompt
+      # Modify to your actual path
+      # Windows example: D:/Glyphforge-data/prompt:/datas/prompt
+      # Linux/Mac example: /home/user/glyphforge-data/prompt:/datas/prompt
+      # NAS example: /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas/prompt
+      - /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas/prompt
     environment:
       - NODE_ENV=production
     restart: unless-stopped

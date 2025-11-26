@@ -8,9 +8,11 @@ services:
       - "3001:3001"
       - "5173:5173"
     volumes:
-      # 修改為你 NAS 上的實際路徑
-      # 例如: /volume1/docker/glyphforge-data/prompt:/data/prompt
-      - /path/to/your/prompt:/data/prompt
+      # Modify to your actual NAS path
+      # Synology example: /volume1/docker/glyphforge-data/prompt:/datas/prompt
+      # QNAP example: /share/Container/glyphforge-data/prompt:/datas/prompt
+      # TrueNAS example: /mnt/tank/docker/glyphforge-data/prompt:/datas/prompt
+      - /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas/prompt
     environment:
       - NODE_ENV=production
     restart: unless-stopped
