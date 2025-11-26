@@ -44,7 +44,7 @@ if ($container_status) {
     Write-Host "容器狀態: $container_status" -ForegroundColor Green
     Write-Host ""
     Write-Host "應用程式已啟動:" -ForegroundColor Cyan
-    Write-Host "  - 前端: http://localhost:5173" -ForegroundColor White
+    Write-Host "  - 前端: http://localhost:40001" -ForegroundColor White
     Write-Host "  - 後端 API: http://localhost:3001" -ForegroundColor White
     Write-Host ""
     Write-Host "查看日誌: docker-compose logs -f" -ForegroundColor Yellow

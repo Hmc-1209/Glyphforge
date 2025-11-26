@@ -39,7 +39,7 @@ if [ "$(docker ps -f name=$CONTAINER_NAME --format '{{.Status}}')" ]; then
     docker ps -f name=$CONTAINER_NAME --format "容器狀態: {{.Status}}"
     echo ""
     echo "應用程式已啟動:"
-    echo "  - 前端: http://localhost:5173"
+    echo "  - 前端: http://localhost:40001"
     echo "  - 後端 API: http://localhost:3001"
     echo ""
     echo "查看日誌: docker-compose logs -f"
