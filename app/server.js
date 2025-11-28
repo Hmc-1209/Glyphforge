@@ -7,6 +7,7 @@ import sizeOf from 'image-size'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const a = 1
 
 // Load configuration
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf-8'))
