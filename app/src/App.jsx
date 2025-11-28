@@ -5,6 +5,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('prompt')
   const [prompts, setPrompts] = useState([])
   const [selectedPrompt, setSelectedPrompt] = useState(null)
+  const [characterFilter, setCharacterFilter] = useState('all')
 
   useEffect(() => {
     const loadPrompts = async () => {
@@ -67,6 +68,17 @@ function App() {
     setSelectedPrompt(null)
   }
 
+  // Get unique character counts from prompts
+  const getUniqueCharacterCounts = () => {
+    const counts = new Set(prompts.map(p => p.character || 1))
+    return Array.from(counts).sort((a, b) => a - b)
+  }
+
+  // Filter prompts based on character count
+  const filteredPrompts = characterFilter === 'all'
+    ? prompts
+    : prompts.filter(p => (p.character || 1) === parseInt(characterFilter))
+
   return (
     <div className="app-container">
       <div className="main-card">
@@ -91,9 +103,31 @@ function App() {
               <h2>Prompt Gallery</h2>
               <p>Browse and use preset prompt examples</p>
 
+              <div className="filter-container">
+                <div className="filter-row">
+                  <label htmlFor="character-filter">Character Count:</label>
+                  <select
+                    id="character-filter"
+                    className="filter-select"
+                    value={characterFilter}
+                    onChange={(e) => setCharacterFilter(e.target.value)}
+                  >
+                    <option value="all">All ({prompts.length})</option>
+                    {getUniqueCharacterCounts().map(count => (
+                      <option key={count} value={count.toString()}>
+                        {count} Character{count > 1 ? 's' : ''} ({prompts.filter(p => (p.character || 1) === count).length})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="filter-info">
+                  Showing {filteredPrompts.length} of {prompts.length} prompts
+                </div>
+              </div>
+
               <div className="content-section">
                 <div className="prompt-grid">
-                  {prompts.map((item) => (
+                  {filteredPrompts.map((item) => (
                     <div
                       key={item.id}
                       className="prompt-card"

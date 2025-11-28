@@ -35,10 +35,21 @@ app.get('/api/prompts', async (req, res) => {
     const prompts = folders.map(folder => {
       const folderPath = path.join(PROMPT_FOLDER_PATH, folder)
       const promptPath = path.join(folderPath, 'prompt.txt')
+      const metaPath = path.join(folderPath, 'meta.json')
 
       let promptText = ''
       if (fs.existsSync(promptPath)) {
         promptText = fs.readFileSync(promptPath, 'utf-8')
+      }
+
+      // Read meta.json if exists
+      let meta = { character: 1 } // Default to 1 character
+      if (fs.existsSync(metaPath)) {
+        try {
+          meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+        } catch (error) {
+          console.error(`Error reading meta.json for ${folder}:`, error)
+        }
       }
 
       // Scan all images in the folder
@@ -76,7 +87,8 @@ app.get('/api/prompts', async (req, res) => {
         thumbnail: images[0] || '',
         images: images,
         imageOrientation: imageOrientation,
-        prompt: promptText
+        prompt: promptText,
+        character: meta.character || 1
       }
     })
 
