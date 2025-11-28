@@ -43,10 +43,18 @@ app.get('/api/prompts', async (req, res) => {
       }
 
       // Read meta.json if exists
-      let meta = { character: 1 } // Default to 1 character
+      let meta = {
+        character: 1,
+        place: 'Unknown',
+        sensitive: 'Unknown',
+        type: 'Unknown',
+        view: 'Unknown',
+        nudity: 'Unknown'
+      }
       if (fs.existsSync(metaPath)) {
         try {
-          meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          const metaData = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          meta = { ...meta, ...metaData }
         } catch (error) {
           console.error(`Error reading meta.json for ${folder}:`, error)
         }
@@ -88,7 +96,12 @@ app.get('/api/prompts', async (req, res) => {
         images: images,
         imageOrientation: imageOrientation,
         prompt: promptText,
-        character: meta.character || 1
+        character: meta.character || 1,
+        place: meta.place || 'Unknown',
+        sensitive: meta.sensitive || 'Unknown',
+        type: meta.type || 'Unknown',
+        view: meta.view || 'Unknown',
+        nudity: meta.nudity || 'Unknown'
       }
     })
 

@@ -5,7 +5,21 @@ function App() {
   const [activeTab, setActiveTab] = useState('prompt')
   const [prompts, setPrompts] = useState([])
   const [selectedPrompt, setSelectedPrompt] = useState(null)
+  const [sensitivityFilter, setSensitivityFilter] = useState(() => {
+    // Load from localStorage, default to 'sfw' for new users
+    return localStorage.getItem('sensitivityFilter') || 'sfw'
+  })
   const [characterFilter, setCharacterFilter] = useState('all')
+  const [placeFilter, setPlaceFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [viewFilter, setViewFilter] = useState('all')
+  const [nudityFilter, setNudityFilter] = useState('all')
+  const [openDropdown, setOpenDropdown] = useState(null)
+
+  // Save sensitivity filter to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sensitivityFilter', sensitivityFilter)
+  }, [sensitivityFilter])
 
   useEffect(() => {
     const loadPrompts = async () => {
@@ -68,19 +82,107 @@ function App() {
     setSelectedPrompt(null)
   }
 
-  // Get unique character counts from prompts
+  // Render a custom dropdown filter
+  const renderFilter = (label, filterId, currentValue, setValue, options, getLabel) => {
+    const isOpen = openDropdown === filterId
+
+    return (
+      <div className="filter-row">
+        <label>{label}:</label>
+        <div className="custom-select-wrapper">
+          <div
+            className="custom-select"
+            onClick={() => setOpenDropdown(isOpen ? null : filterId)}
+          >
+            <div className="custom-select-trigger">
+              <span>{getLabel(currentValue)}</span>
+              <svg className="custom-select-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+            {isOpen && (
+              <div className="custom-select-options">
+                <div
+                  className={`custom-select-option ${currentValue === 'all' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setValue('all')
+                    setOpenDropdown(null)
+                  }}
+                >
+                  All ({sensitivityFilteredPrompts.length})
+                </div>
+                {options.map(option => (
+                  <div
+                    key={option}
+                    className={`custom-select-option ${currentValue === option.toString() ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setValue(option.toString())
+                      setOpenDropdown(null)
+                    }}
+                  >
+                    {getLabel(option)} ({prompts.filter(p => p[filterId] ? p[filterId].toString() === option.toString() : false).length})
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // First filter by sensitivity (top-level filter)
+  const sensitivityFilteredPrompts = prompts.filter(p => {
+    if (sensitivityFilter === 'sfw') return p.sensitive === 'SFW'
+    if (sensitivityFilter === 'nsfw') return p.sensitive === 'NSFW'
+    return true // 'all' shows both
+  })
+
+  // Get unique values for each filter based on sensitivity-filtered prompts
   const getUniqueCharacterCounts = () => {
-    const counts = new Set(prompts.map(p => p.character || 1))
+    const counts = new Set(sensitivityFilteredPrompts.map(p => p.character || 1))
     return Array.from(counts).sort((a, b) => a - b)
   }
 
-  // Filter prompts based on character count
-  const filteredPrompts = characterFilter === 'all'
-    ? prompts
-    : prompts.filter(p => (p.character || 1) === parseInt(characterFilter))
+  const getUniqueValues = (field) => {
+    const values = new Set(sensitivityFilteredPrompts.map(p => p[field] || 'Unknown'))
+    return Array.from(values).sort()
+  }
+
+  // Filter prompts based on all active filters (after sensitivity filter)
+  const filteredPrompts = sensitivityFilteredPrompts.filter(p => {
+    const characterMatch = characterFilter === 'all' || (p.character || 1) === parseInt(characterFilter)
+    const placeMatch = placeFilter === 'all' || p.place === placeFilter
+    const typeMatch = typeFilter === 'all' || p.type === typeFilter
+    const viewMatch = viewFilter === 'all' || p.view === viewFilter
+    const nudityMatch = nudityFilter === 'all' || p.nudity === nudityFilter
+
+    return characterMatch && placeMatch && typeMatch && viewMatch && nudityMatch
+  })
 
   return (
     <div className="app-container">
+      {/* Floating Sensitivity Toggle */}
+      <div className="sensitivity-toggle-container">
+        <div className="sensitivity-toggle">
+          <button
+            className={`toggle-option ${sensitivityFilter === 'sfw' ? 'active' : ''}`}
+            onClick={() => setSensitivityFilter('sfw')}
+          ></button>
+          <button
+            className={`toggle-option ${sensitivityFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setSensitivityFilter('all')}
+          ></button>
+          <button
+            className={`toggle-option ${sensitivityFilter === 'nsfw' ? 'active' : ''}`}
+            onClick={() => setSensitivityFilter('nsfw')}
+          ></button>
+          <div className={`toggle-slider ${sensitivityFilter}`}></div>
+        </div>
+      </div>
+
       <div className="main-card">
         <div className="tab-container">
           <button
@@ -104,24 +206,58 @@ function App() {
               <p>Browse and use preset prompt examples</p>
 
               <div className="filter-container">
-                <div className="filter-row">
-                  <label htmlFor="character-filter">Character Count:</label>
-                  <select
-                    id="character-filter"
-                    className="filter-select"
-                    value={characterFilter}
-                    onChange={(e) => setCharacterFilter(e.target.value)}
-                  >
-                    <option value="all">All ({prompts.length})</option>
-                    {getUniqueCharacterCounts().map(count => (
-                      <option key={count} value={count.toString()}>
-                        {count} Character{count > 1 ? 's' : ''} ({prompts.filter(p => (p.character || 1) === count).length})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Character Filter */}
+                {renderFilter(
+                  'Character',
+                  'character',
+                  characterFilter,
+                  setCharacterFilter,
+                  getUniqueCharacterCounts(),
+                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : `${val} Character${parseInt(val) > 1 ? 's' : ''}`
+                )}
+
+                {/* Place Filter */}
+                {renderFilter(
+                  'Place',
+                  'place',
+                  placeFilter,
+                  setPlaceFilter,
+                  getUniqueValues('place'),
+                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
+                )}
+
+                {/* Type Filter */}
+                {renderFilter(
+                  'Type',
+                  'type',
+                  typeFilter,
+                  setTypeFilter,
+                  getUniqueValues('type'),
+                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
+                )}
+
+                {/* View Filter */}
+                {renderFilter(
+                  'View',
+                  'view',
+                  viewFilter,
+                  setViewFilter,
+                  getUniqueValues('view'),
+                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
+                )}
+
+                {/* Nudity Filter */}
+                {renderFilter(
+                  'Nudity',
+                  'nudity',
+                  nudityFilter,
+                  setNudityFilter,
+                  getUniqueValues('nudity'),
+                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
+                )}
+
                 <div className="filter-info">
-                  Showing {filteredPrompts.length} of {prompts.length} prompts
+                  Showing {filteredPrompts.length} of {sensitivityFilteredPrompts.length} prompts
                 </div>
               </div>
 
