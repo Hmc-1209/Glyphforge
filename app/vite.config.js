@@ -21,6 +21,10 @@ export default defineConfig({
       [`/${config.promptFolder.name}`]: {
         target: 'http://localhost:3001',
         changeOrigin: true,
+      },
+      [`/${config.loraFolder.name}`]: {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
       }
     }
   }

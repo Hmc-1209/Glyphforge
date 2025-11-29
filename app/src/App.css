@@ -204,6 +204,8 @@ label {
   width: 100%;
   aspect-ratio: 1;
   background: linear-gradient(135deg, rgba(99, 130, 191, 0.2) 0%, rgba(139, 164, 208, 0.1) 100%);
+  background-size: cover;
+  background-position: center;
   border-radius: 8px;
   margin-bottom: 0.75rem;
 }
@@ -275,9 +277,11 @@ label {
   padding: 2rem;
   max-width: 90vw;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
   position: relative;
   animation: slideUp 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 @keyframes slideUp {
@@ -319,11 +323,13 @@ label {
   display: grid;
   gap: 1.5rem;
   margin-bottom: 1.5rem;
+  max-height: calc(90vh - 250px);
+  overflow: hidden;
 }
 
 /* 直放圖（portrait）- 並排顯示 */
 .popup-images.portrait {
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
 }
 
 /* 橫放圖（landscape）- 單張居中顯示 */
@@ -334,7 +340,9 @@ label {
 
 .popup-images img {
   width: 100%;
-  height: auto;
+  height: 100%;
+  max-height: calc(90vh - 250px);
+  object-fit: contain;
   border-radius: 8px;
   border: 1px solid rgba(99, 130, 191, 0.2);
 }
@@ -343,6 +351,11 @@ label {
 .popup-images.landscape img {
   max-width: 100%;
   margin: 0 auto;
+}
+
+/* 直放圖如果有兩張，限制高度讓兩張能並排 */
+.popup-images.portrait img {
+  max-height: calc(90vh - 300px);
 }
 
 .copy-button {
@@ -477,6 +490,11 @@ label {
     margin-bottom: 1rem;
   }
 
+  .filter-grid {
+    grid-template-columns: 1fr;
+    padding: 0 1rem;
+  }
+
   .filter-row {
     flex-direction: column;
     align-items: flex-start;
@@ -486,19 +504,113 @@ label {
     max-width: 100%;
     width: 100%;
   }
+
+  .filter-toggle-button {
+    padding: 0.875rem 1rem;
+    font-size: 0.95rem;
+  }
+
+  .filter-count {
+    font-size: 0.85rem;
+  }
 }
 
 /* Filter Container */
 .filter-container {
   margin-bottom: 2rem;
-  padding: 1.5rem;
+  position: relative;
+  z-index: 100;
+}
+
+.filter-toggle-button {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  margin-top: 0.5rem;
   background: rgba(31, 35, 50, 0.4);
   border: 1px solid rgba(99, 130, 191, 0.2);
   border-radius: 12px;
+  color: #8ba4d0;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.filter-container:has(.filter-content.expanded) .filter-toggle-button {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.filter-toggle-button > span:first-child {
+  flex-shrink: 0;
+}
+
+.filter-toggle-button:hover {
+  background: rgba(99, 130, 191, 0.1);
+}
+
+.filter-arrow {
+  color: #8ba4d0;
+  font-size: 0.8rem;
+  transition: transform 0.3s ease;
+  display: inline-block;
+}
+
+.filter-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.filter-count {
+  color: #9ca3b4;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.filter-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s ease;
+  position: relative;
+}
+
+.filter-content.expanded {
+  grid-template-rows: 1fr;
+}
+
+.filter-content > div {
+  min-height: 0;
+  overflow: visible;
+  background: rgba(31, 35, 50, 0.4);
+  border: 1px solid rgba(99, 130, 191, 0.2);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+}
+
+.filter-content:not(.expanded) > div {
+  border: none;
+  background: transparent;
+}
+
+.filter-grid {
+  padding: 1rem 1.5rem;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
   align-items: start;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.filter-content.expanded .filter-grid {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 .filter-row {
@@ -621,19 +733,24 @@ label {
 }
 
 .filter-info {
-  grid-column: 1 / -1;
   color: #9ca3b4;
   font-size: 0.9rem;
   font-style: italic;
   text-align: center;
-  padding-top: 0.5rem;
+  padding: 0.75rem 1.5rem 0.75rem 1.5rem;
   border-top: 1px solid rgba(99, 130, 191, 0.2);
   margin-top: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.filter-content.expanded .filter-info {
+  opacity: 1;
 }
 
 /* Floating Sensitivity Toggle */
 .sensitivity-toggle-container {
-  position: fixed;
+  position: absolute;
   top: 20px;
   right: 20px;
   z-index: 2000;
@@ -674,25 +791,23 @@ label {
 
 .toggle-slider {
   position: absolute;
-  top: 3px;
+  top: 50%;
+  transform: translateY(-50%);
   left: 3px;
   width: 30px;
   height: 30px;
   background: radial-gradient(circle at 40% 40%,
-    rgba(220, 240, 255, 1) 0%,
-    rgba(180, 220, 255, 0.95) 30%,
-    rgba(140, 200, 255, 0.9) 60%,
-    rgba(100, 180, 240, 0.8) 100%
+    rgba(240, 240, 240, 1) 0%,
+    rgba(220, 220, 220, 0.95) 30%,
+    rgba(200, 200, 200, 0.9) 60%,
+    rgba(180, 180, 180, 0.8) 100%
   );
   border-radius: 50%;
   transition: left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  /* box-shadow:
-    0 0 0 2px rgba(220, 240, 255, 0.8),
-    0 0 20px rgba(180, 220, 255, 0.9),
-    0 0 30px rgba(180, 220, 255, 0.6),
+  box-shadow:
     0 2px 4px rgba(0, 0, 0, 0.3),
-    inset -2px -2px 6px rgba(100, 180, 240, 0.4),
-    inset 2px 2px 8px rgba(255, 255, 255, 0.8); */
+    inset -2px -2px 6px rgba(150, 150, 150, 0.4),
+    inset 2px 2px 8px rgba(255, 255, 255, 0.8);
   z-index: 1;
   pointer-events: none;
 }
@@ -719,4 +834,68 @@ label {
   .sensitivity-toggle {
     height: 40px;
   }
+}
+
+/* LoRA Meta Info */
+.lora-meta-info {
+  margin-top: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: rgba(31, 35, 50, 0.6);
+  border: 1px solid rgba(99, 130, 191, 0.2);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.lora-meta-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.lora-meta-label {
+  color: #8ba4d0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lora-meta-value {
+  color: #e4e6eb;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+/* LoRA Actions */
+.lora-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.lora-action-button {
+  width: 60px;
+  height: 60px;
+  background: rgba(99, 130, 191, 0.2);
+  border: 1px solid rgba(99, 130, 191, 0.3);
+  border-radius: 12px;
+  color: #8ba4d0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.lora-action-button:hover {
+  background: rgba(99, 130, 191, 0.3);
+  border-color: rgba(99, 130, 191, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 130, 191, 0.2);
+}
+
+.lora-action-button svg {
+  flex-shrink: 0;
 }

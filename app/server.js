@@ -15,6 +15,11 @@ const PROMPT_FOLDER_PATH = path.isAbsolute(config.promptFolder.path)
   : path.join(__dirname, config.promptFolder.path)
 const PROMPT_FOLDER_NAME = config.promptFolder.name
 
+const LORA_FOLDER_PATH = path.isAbsolute(config.loraFolder.path)
+  ? config.loraFolder.path
+  : path.join(__dirname, config.loraFolder.path)
+const LORA_FOLDER_NAME = config.loraFolder.name
+
 const app = express()
 const PORT = 3001
 
@@ -24,6 +29,7 @@ app.use(express.json())
 
 // Static file service - serve images from configured folder
 app.use(`/${PROMPT_FOLDER_NAME}`, express.static(PROMPT_FOLDER_PATH))
+app.use(`/${LORA_FOLDER_NAME}`, express.static(LORA_FOLDER_PATH))
 
 // API route - get all prompt data
 app.get('/api/prompts', async (req, res) => {
@@ -68,7 +74,7 @@ app.get('/api/prompts', async (req, res) => {
       const images = []
       let imageOrientation = 'unknown'
 
-      // Detect image orientation
+      // Detect image orientation from first image
       if (imageFiles.length > 0) {
         const firstImagePath = path.join(folderPath, imageFiles[0])
         try {
@@ -78,16 +84,10 @@ app.get('/api/prompts', async (req, res) => {
           console.error(`Error reading image dimensions for ${firstImagePath}:`, error)
         }
 
-        // Decide which images to use based on orientation
-        if (imageOrientation === 'landscape') {
-          // Landscape: only use the first image
-          images.push(`/${PROMPT_FOLDER_NAME}/${folder}/${imageFiles[0]}`)
-        } else {
-          // Portrait: use all images (max 2)
-          imageFiles.slice(0, 2).forEach(file => {
-            images.push(`/${PROMPT_FOLDER_NAME}/${folder}/${file}`)
-          })
-        }
+        // Add all available images (up to 2)
+        imageFiles.slice(0, 2).forEach(file => {
+          images.push(`/${PROMPT_FOLDER_NAME}/${folder}/${file}`)
+        })
       }
 
       return {
@@ -109,6 +109,76 @@ app.get('/api/prompts', async (req, res) => {
   } catch (error) {
     console.error('Error reading prompts:', error)
     res.status(500).json({ error: 'Failed to load prompts' })
+  }
+})
+
+// API route - get all LoRA data
+app.get('/api/loras', async (req, res) => {
+  try {
+    const characterFolderPath = path.join(LORA_FOLDER_PATH, 'character')
+
+    // Check if character folder exists
+    if (!fs.existsSync(characterFolderPath)) {
+      console.error('Character folder not found:', characterFolderPath)
+      return res.json([])
+    }
+
+    const folders = fs.readdirSync(characterFolderPath).filter(file => {
+      return fs.statSync(path.join(characterFolderPath, file)).isDirectory()
+    })
+
+    const loras = folders.map(folder => {
+      const folderPath = path.join(characterFolderPath, folder)
+      const metaPath = path.join(folderPath, 'meta.json')
+      const thumbnailPath = path.join(folderPath, '0.png')
+      const previewPath = path.join(folderPath, '1.png')
+
+      // Read meta.json
+      let meta = {
+        character: folder,
+        cloth: '',
+        link: '',
+        prompt: ''
+      }
+      if (fs.existsSync(metaPath)) {
+        try {
+          const metaData = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          meta = { ...meta, ...metaData }
+        } catch (error) {
+          console.error(`Error reading meta.json for ${folder}:`, error)
+        }
+      }
+
+      // Generate display name: character or character-cloth
+      const displayName = meta.cloth && meta.cloth.trim() !== ''
+        ? `${meta.character}-${meta.cloth}`
+        : meta.character
+
+      // Find .safetensors file
+      const files = fs.readdirSync(folderPath)
+      const safetensorsFile = files.find(file => file.endsWith('.safetensors'))
+
+      return {
+        id: folder,
+        name: displayName,
+        thumbnail: fs.existsSync(thumbnailPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/0.png` : '',
+        preview: fs.existsSync(previewPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/1.png` : '',
+        link: meta.link || '',
+        prompt: meta.prompt || '',
+        safetensorsFile: safetensorsFile || '',
+        safetensorsPath: safetensorsFile ? `/${LORA_FOLDER_NAME}/character/${folder}/${safetensorsFile}` : '',
+        // Include all meta fields
+        character: meta.character || folder,
+        cloth: meta.cloth || '',
+        gender: meta.gender || '',
+        model: meta.model || ''
+      }
+    })
+
+    res.json(loras)
+  } catch (error) {
+    console.error('Error reading LoRAs:', error)
+    res.status(500).json({ error: 'Failed to load LoRAs' })
   }
 })
 

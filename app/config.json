@@ -2,5 +2,9 @@
   "promptFolder": {
     "path": "D:\\Glyphforge-data\\prompt\\",
     "name": "prompt"
+  },
+  "loraFolder": {
+    "path": "D:\\Glyphforge-data\\LoRA\\",
+    "name": "LoRA"
   }
 }

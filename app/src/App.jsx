@@ -5,6 +5,8 @@ function App() {
   const [activeTab, setActiveTab] = useState('prompt')
   const [prompts, setPrompts] = useState([])
   const [selectedPrompt, setSelectedPrompt] = useState(null)
+  const [loras, setLoras] = useState([])
+  const [selectedLora, setSelectedLora] = useState(null)
   const [sensitivityFilter, setSensitivityFilter] = useState(() => {
     // Load from localStorage, default to 'sfw' for new users
     return localStorage.getItem('sensitivityFilter') || 'sfw'
@@ -15,6 +17,13 @@ function App() {
   const [viewFilter, setViewFilter] = useState('all')
   const [nudityFilter, setNudityFilter] = useState('all')
   const [openDropdown, setOpenDropdown] = useState(null)
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false)
+
+  // LoRA filters
+  const [loraGenderFilter, setLoraGenderFilter] = useState('all')
+  const [loraModelFilter, setLoraModelFilter] = useState('all')
+  const [loraCharacterFilter, setLoraCharacterFilter] = useState('all')
+  const [isLoraFilterExpanded, setIsLoraFilterExpanded] = useState(false)
 
   // Save sensitivity filter to localStorage whenever it changes
   useEffect(() => {
@@ -46,6 +55,37 @@ function App() {
     }
     loadPrompts()
   }, [])
+
+  useEffect(() => {
+    const loadLoras = async () => {
+      try {
+        const response = await fetch('/api/loras')
+        const data = await response.json()
+        setLoras(data)
+      } catch (error) {
+        console.error('Failed to load LoRAs:', error)
+        setLoras([])
+      }
+    }
+    loadLoras()
+  }, [])
+
+  // Handle ESC key to close popups
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        if (selectedPrompt) {
+          setSelectedPrompt(null)
+        }
+        if (selectedLora) {
+          setSelectedLora(null)
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [selectedPrompt, selectedLora])
 
   const handleCopyPrompt = async (promptText) => {
     try {
@@ -82,7 +122,7 @@ function App() {
     setSelectedPrompt(null)
   }
 
-  // Render a custom dropdown filter
+  // Render a custom dropdown filter for prompts
   const renderFilter = (label, filterId, currentValue, setValue, options, getLabel) => {
     const isOpen = openDropdown === filterId
 
@@ -133,6 +173,57 @@ function App() {
     )
   }
 
+  // Render a custom dropdown filter for LoRAs
+  const renderLoraFilter = (label, filterId, currentValue, setValue, options, getLabel) => {
+    const isOpen = openDropdown === filterId
+
+    return (
+      <div className="filter-row">
+        <label>{label}:</label>
+        <div className="custom-select-wrapper">
+          <div
+            className="custom-select"
+            onClick={() => setOpenDropdown(isOpen ? null : filterId)}
+          >
+            <div className="custom-select-trigger">
+              <span>{getLabel(currentValue)}</span>
+              <svg className="custom-select-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+            {isOpen && (
+              <div className="custom-select-options">
+                <div
+                  className={`custom-select-option ${currentValue === 'all' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setValue('all')
+                    setOpenDropdown(null)
+                  }}
+                >
+                  All ({loras.length})
+                </div>
+                {options.map(option => (
+                  <div
+                    key={option}
+                    className={`custom-select-option ${currentValue === option.toString() ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setValue(option.toString())
+                      setOpenDropdown(null)
+                    }}
+                  >
+                    {getLabel(option)} ({loras.filter(l => l[filterId] ? l[filterId].toString() === option.toString() : false).length})
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // First filter by sensitivity (top-level filter)
   const sensitivityFilteredPrompts = prompts.filter(p => {
     if (sensitivityFilter === 'sfw') return p.sensitive === 'SFW'
@@ -160,6 +251,21 @@ function App() {
     const nudityMatch = nudityFilter === 'all' || p.nudity === nudityFilter
 
     return characterMatch && placeMatch && typeMatch && viewMatch && nudityMatch
+  })
+
+  // Get unique values for LoRA filters
+  const getLoraUniqueValues = (field) => {
+    const values = new Set(loras.map(l => l[field] || 'Unknown').filter(v => v && v !== ''))
+    return Array.from(values).sort()
+  }
+
+  // Filter LoRAs based on active filters
+  const filteredLoras = loras.filter(l => {
+    const genderMatch = loraGenderFilter === 'all' || l.gender === loraGenderFilter
+    const modelMatch = loraModelFilter === 'all' || l.model === loraModelFilter
+    const characterMatch = loraCharacterFilter === 'all' || l.character === loraCharacterFilter
+
+    return genderMatch && modelMatch && characterMatch
   })
 
   return (
@@ -206,58 +312,75 @@ function App() {
               <p>Browse and use preset prompt examples</p>
 
               <div className="filter-container">
-                {/* Character Filter */}
-                {renderFilter(
-                  'Character',
-                  'character',
-                  characterFilter,
-                  setCharacterFilter,
-                  getUniqueCharacterCounts(),
-                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : `${val} Character${parseInt(val) > 1 ? 's' : ''}`
-                )}
+                <button
+                  className="filter-toggle-button"
+                  onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+                >
+                  <span>Filters</span>
+                  <span className={`filter-arrow ${isFilterExpanded ? 'expanded' : ''}`}>▼</span>
+                  <span className="filter-count">
+                    {filteredPrompts.length} / {sensitivityFilteredPrompts.length}
+                  </span>
+                </button>
 
-                {/* Place Filter */}
-                {renderFilter(
-                  'Place',
-                  'place',
-                  placeFilter,
-                  setPlaceFilter,
-                  getUniqueValues('place'),
-                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
-                )}
+                <div className={`filter-content ${isFilterExpanded ? 'expanded' : ''}`}>
+                  <div>
+                    <div className="filter-grid">
+                      {/* Character Filter */}
+                      {renderFilter(
+                        'Character',
+                        'character',
+                        characterFilter,
+                        setCharacterFilter,
+                        getUniqueCharacterCounts(),
+                        (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : `${val} Character${parseInt(val) > 1 ? 's' : ''}`
+                      )}
 
-                {/* Type Filter */}
-                {renderFilter(
-                  'Type',
-                  'type',
-                  typeFilter,
-                  setTypeFilter,
-                  getUniqueValues('type'),
-                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
-                )}
+                      {/* Place Filter */}
+                      {renderFilter(
+                        'Place',
+                        'place',
+                        placeFilter,
+                        setPlaceFilter,
+                        getUniqueValues('place'),
+                        (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
+                      )}
 
-                {/* View Filter */}
-                {renderFilter(
-                  'View',
-                  'view',
-                  viewFilter,
-                  setViewFilter,
-                  getUniqueValues('view'),
-                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
-                )}
+                      {/* Type Filter */}
+                      {renderFilter(
+                        'Type',
+                        'type',
+                        typeFilter,
+                        setTypeFilter,
+                        getUniqueValues('type'),
+                        (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
+                      )}
 
-                {/* Nudity Filter */}
-                {renderFilter(
-                  'Nudity',
-                  'nudity',
-                  nudityFilter,
-                  setNudityFilter,
-                  getUniqueValues('nudity'),
-                  (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
-                )}
+                      {/* View Filter */}
+                      {renderFilter(
+                        'View',
+                        'view',
+                        viewFilter,
+                        setViewFilter,
+                        getUniqueValues('view'),
+                        (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
+                      )}
 
-                <div className="filter-info">
-                  Showing {filteredPrompts.length} of {sensitivityFilteredPrompts.length} prompts
+                      {/* Nudity Filter - Only show when not in SFW mode */}
+                      {sensitivityFilter !== 'sfw' && renderFilter(
+                        'Nudity',
+                        'nudity',
+                        nudityFilter,
+                        setNudityFilter,
+                        getUniqueValues('nudity'),
+                        (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
+                      )}
+                    </div>
+
+                    <div className="filter-info">
+                      Showing {filteredPrompts.length} of {sensitivityFilteredPrompts.length} prompts
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -285,33 +408,79 @@ function App() {
 
           {activeTab === 'lora' && (
             <div className="tab-content">
-              <h2>LoRA Management</h2>
-              <p>Select and adjust LoRA models</p>
+              <h2>LoRA Gallery</h2>
+              <p>Browse and download LoRA models</p>
+
+              <div className="filter-container">
+                <button
+                  className="filter-toggle-button"
+                  onClick={() => setIsLoraFilterExpanded(!isLoraFilterExpanded)}
+                >
+                  <span>Filters</span>
+                  <span className={`filter-arrow ${isLoraFilterExpanded ? 'expanded' : ''}`}>▼</span>
+                  <span className="filter-count">
+                    {filteredLoras.length} / {loras.length}
+                  </span>
+                </button>
+
+                <div className={`filter-content ${isLoraFilterExpanded ? 'expanded' : ''}`}>
+                  <div>
+                    <div className="filter-grid">
+                      {/* Gender Filter */}
+                      {renderLoraFilter(
+                        'Gender',
+                        'gender',
+                        loraGenderFilter,
+                        setLoraGenderFilter,
+                        getLoraUniqueValues('gender'),
+                        (val) => val === 'all' ? `All (${loras.length})` : val
+                      )}
+
+                      {/* Model Filter */}
+                      {renderLoraFilter(
+                        'Model',
+                        'model',
+                        loraModelFilter,
+                        setLoraModelFilter,
+                        getLoraUniqueValues('model'),
+                        (val) => val === 'all' ? `All (${loras.length})` : val
+                      )}
+
+                      {/* Character Filter */}
+                      {renderLoraFilter(
+                        'Character',
+                        'character',
+                        loraCharacterFilter,
+                        setLoraCharacterFilter,
+                        getLoraUniqueValues('character'),
+                        (val) => val === 'all' ? `All (${loras.length})` : val
+                      )}
+                    </div>
+
+                    <div className="filter-info">
+                      Showing {filteredLoras.length} of {loras.length} LoRAs
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div className="content-section">
-                <h3>Installed LoRAs</h3>
                 <div className="lora-grid">
-                  <div className="lora-card">
-                    <div className="lora-preview"></div>
-                    <div className="lora-info">
-                      <h4>Style LoRA 1</h4>
-                      <p>Weight: 0.8</p>
+                  {filteredLoras.map((lora) => (
+                    <div
+                      key={lora.id}
+                      className="lora-card"
+                      onClick={() => setSelectedLora(lora)}
+                    >
+                      <div
+                        className="lora-preview"
+                        style={{ backgroundImage: `url(${lora.thumbnail})` }}
+                      ></div>
+                      <div className="lora-info">
+                        <h4>{lora.name}</h4>
+                      </div>
                     </div>
-                  </div>
-                  <div className="lora-card">
-                    <div className="lora-preview"></div>
-                    <div className="lora-info">
-                      <h4>Style LoRA 2</h4>
-                      <p>Weight: 0.6</p>
-                    </div>
-                  </div>
-                  <div className="lora-card">
-                    <div className="lora-preview"></div>
-                    <div className="lora-info">
-                      <h4>Style LoRA 3</h4>
-                      <p>Weight: 0.7</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -340,6 +509,93 @@ function App() {
               </svg>
               Copy Prompt
             </button>
+          </div>
+        </div>
+      )}
+
+      {selectedLora && (
+        <div className="popup-overlay" onClick={() => setSelectedLora(null)}>
+          <div className="popup-content" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={() => setSelectedLora(null)}>×</button>
+
+            <div className="popup-images landscape">
+              <img src={selectedLora.preview} alt={selectedLora.name} />
+            </div>
+
+            <div className="lora-meta-info">
+              {selectedLora.character && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Character:</span>
+                  <span className="lora-meta-value">{selectedLora.character}</span>
+                </div>
+              )}
+              {selectedLora.cloth && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Cloth:</span>
+                  <span className="lora-meta-value">{selectedLora.cloth}</span>
+                </div>
+              )}
+              {selectedLora.gender && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Gender:</span>
+                  <span className="lora-meta-value">{selectedLora.gender}</span>
+                </div>
+              )}
+              {selectedLora.model && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Model:</span>
+                  <span className="lora-meta-value">{selectedLora.model}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="lora-actions">
+              {selectedLora.link && (
+                <button
+                  className="lora-action-button"
+                  onClick={() => window.open(selectedLora.link, '_blank')}
+                  title="Open external link"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                </button>
+              )}
+              {selectedLora.safetensorsPath && (
+                <button
+                  className="lora-action-button"
+                  onClick={() => {
+                    const link = document.createElement('a')
+                    link.href = selectedLora.safetensorsPath
+                    link.download = selectedLora.safetensorsFile
+                    document.body.appendChild(link)
+                    link.click()
+                    document.body.removeChild(link)
+                  }}
+                  title="Download LoRA file"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                </button>
+              )}
+              {selectedLora.prompt && (
+                <button
+                  className="lora-action-button"
+                  onClick={() => handleCopyPrompt(selectedLora.prompt)}
+                  title="Copy prompt"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
