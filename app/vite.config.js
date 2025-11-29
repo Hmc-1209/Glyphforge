@@ -36,8 +36,10 @@ export default defineConfig({
       }
     },
     hmr: {
-      clientPort: 443,
-      protocol: 'wss'
+      overlay: false
+    },
+    watch: {
+      usePolling: false
     }
   },
   preview: {

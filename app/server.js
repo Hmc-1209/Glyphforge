@@ -27,6 +27,12 @@ const PORT = 3001
 app.use(cors())
 app.use(express.json())
 
+// Serve static files from dist folder in production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, 'dist')
+  app.use(express.static(distPath))
+}
+
 // Static file service - serve images from configured folder
 app.use(`/${PROMPT_FOLDER_NAME}`, express.static(PROMPT_FOLDER_PATH))
 app.use(`/${LORA_FOLDER_NAME}`, express.static(LORA_FOLDER_PATH))
@@ -186,6 +192,13 @@ app.get('/api/loras', async (req, res) => {
 app.get('/api/config', (req, res) => {
   res.json(config)
 })
+
+// Serve index.html for all other routes in production (SPA support)
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+  })
+}
 
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`)

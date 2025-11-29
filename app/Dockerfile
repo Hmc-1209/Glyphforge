@@ -21,7 +21,6 @@ RUN npm run build
 
 # Expose ports
 EXPOSE 3001
-EXPOSE 5173
 
-# Start application
+# Start application in production mode
 CMD ["npm", "start"]
