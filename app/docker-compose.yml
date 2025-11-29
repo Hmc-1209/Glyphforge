@@ -8,10 +8,10 @@ services:
       - "40001:3001"
     volumes:
       # Modify to your actual path
-      # Windows example: D:/Glyphforge-data/prompt:/datas/prompt
-      # Linux/Mac example: /home/user/glyphforge-data/prompt:/datas/prompt
-      # NAS example: /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas/prompt
-      - /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas/prompt
+      # Windows example: D:/Glyphforge-data:/datas
+      # Linux/Mac example: /home/user/glyphforge-data:/datas
+      # NAS example: /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas
+      - /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas
     environment:
       - NODE_ENV=production
     restart: unless-stopped
