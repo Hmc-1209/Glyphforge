@@ -107,7 +107,8 @@ app.get('/api/prompts', async (req, res) => {
         sensitive: meta.sensitive || 'Unknown',
         type: meta.type || 'Unknown',
         view: meta.view || 'Unknown',
-        nudity: meta.nudity || 'Unknown'
+        nudity: meta.nudity || 'Unknown',
+        copyCount: meta.copyCount || 0
       }
     })
 
@@ -177,7 +178,9 @@ app.get('/api/loras', async (req, res) => {
         character: meta.character || folder,
         cloth: meta.cloth || '',
         gender: meta.gender || '',
-        model: meta.model || ''
+        model: meta.model || '',
+        copyCount: meta.copyCount || 0,
+        downloadCount: meta.downloadCount || 0
       }
     })
 
@@ -185,6 +188,66 @@ app.get('/api/loras', async (req, res) => {
   } catch (error) {
     console.error('Error reading LoRAs:', error)
     res.status(500).json({ error: 'Failed to load LoRAs' })
+  }
+})
+
+// API route - increment prompt copy count
+app.post('/api/prompts/:id/copy', (req, res) => {
+  try {
+    const { id } = req.params
+    const metaPath = path.join(PROMPT_FOLDER_PATH, id, 'meta.json')
+
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+      meta.copyCount = (meta.copyCount || 0) + 1
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      res.json({ success: true, copyCount: meta.copyCount })
+    } else {
+      res.status(404).json({ error: 'Meta file not found' })
+    }
+  } catch (error) {
+    console.error('Error updating prompt copy count:', error)
+    res.status(500).json({ error: 'Failed to update copy count' })
+  }
+})
+
+// API route - increment LoRA copy count
+app.post('/api/loras/:id/copy', (req, res) => {
+  try {
+    const { id } = req.params
+    const metaPath = path.join(LORA_FOLDER_PATH, 'character', id, 'meta.json')
+
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+      meta.copyCount = (meta.copyCount || 0) + 1
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      res.json({ success: true, copyCount: meta.copyCount })
+    } else {
+      res.status(404).json({ error: 'Meta file not found' })
+    }
+  } catch (error) {
+    console.error('Error updating LoRA copy count:', error)
+    res.status(500).json({ error: 'Failed to update copy count' })
+  }
+})
+
+// API route - increment LoRA download count
+app.post('/api/loras/:id/download', (req, res) => {
+  try {
+    const { id } = req.params
+    const metaPath = path.join(LORA_FOLDER_PATH, 'character', id, 'meta.json')
+
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+      meta.downloadCount = (meta.downloadCount || 0) + 1
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      res.json({ success: true, downloadCount: meta.downloadCount })
+    } else {
+      res.status(404).json({ error: 'Meta file not found' })
+    }
+  } catch (error) {
+    console.error('Error updating LoRA download count:', error)
+    res.status(500).json({ error: 'Failed to update download count' })
   }
 })
 

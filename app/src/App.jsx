@@ -25,6 +25,10 @@ function App() {
   const [loraCharacterFilter, setLoraCharacterFilter] = useState('all')
   const [isLoraFilterExpanded, setIsLoraFilterExpanded] = useState(false)
 
+  // Sort options
+  const [promptSortBy, setPromptSortBy] = useState('default')
+  const [loraSortBy, setLoraSortBy] = useState('default')
+
   // Save sensitivity filter to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('sensitivityFilter', sensitivityFilter)
@@ -87,12 +91,35 @@ function App() {
     return () => document.removeEventListener('keydown', handleEscape)
   }, [selectedPrompt, selectedLora])
 
-  const handleCopyPrompt = async (promptText) => {
+  const handleCopyPrompt = async (promptText, itemId, itemType) => {
     try {
       await navigator.clipboard.writeText(promptText)
       showCopyToast()
+
+      // Increment copy counter
+      if (itemId && itemType) {
+        const endpoint = itemType === 'prompt' ? `/api/prompts/${itemId}/copy` : `/api/loras/${itemId}/copy`
+        await fetch(endpoint, { method: 'POST' })
+      }
     } catch (error) {
       console.error('Failed to copy:', error)
+    }
+  }
+
+  const handleDownload = async (loraId, safetensorsPath, safetensorsFile) => {
+    try {
+      // Trigger download
+      const link = document.createElement('a')
+      link.href = safetensorsPath
+      link.download = safetensorsFile
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      // Increment download counter
+      await fetch(`/api/loras/${loraId}/download`, { method: 'POST' })
+    } catch (error) {
+      console.error('Failed to download:', error)
     }
   }
 
@@ -173,6 +200,47 @@ function App() {
     )
   }
 
+  // Render sort dropdown
+  const renderSortDropdown = (currentValue, setValue, options) => {
+    const isOpen = openDropdown === 'sort'
+
+    return (
+      <div className="filter-row">
+        <label>Sort By:</label>
+        <div className="custom-select-wrapper">
+          <div
+            className="custom-select"
+            onClick={() => setOpenDropdown(isOpen ? null : 'sort')}
+          >
+            <div className="custom-select-trigger">
+              <span>{options.find(opt => opt.value === currentValue)?.label || 'Default'}</span>
+              <svg className="custom-select-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+            {isOpen && (
+              <div className="custom-select-options">
+                {options.map(option => (
+                  <div
+                    key={option.value}
+                    className={`custom-select-option ${currentValue === option.value ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setValue(option.value)
+                      setOpenDropdown(null)
+                    }}
+                  >
+                    {option.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Render a custom dropdown filter for LoRAs
   const renderLoraFilter = (label, filterId, currentValue, setValue, options, getLabel) => {
     const isOpen = openDropdown === filterId
@@ -243,15 +311,25 @@ function App() {
   }
 
   // Filter prompts based on all active filters (after sensitivity filter)
-  const filteredPrompts = sensitivityFilteredPrompts.filter(p => {
-    const characterMatch = characterFilter === 'all' || (p.character || 1) === parseInt(characterFilter)
-    const placeMatch = placeFilter === 'all' || p.place === placeFilter
-    const typeMatch = typeFilter === 'all' || p.type === typeFilter
-    const viewMatch = viewFilter === 'all' || p.view === viewFilter
-    const nudityMatch = nudityFilter === 'all' || p.nudity === nudityFilter
+  const filteredAndSortedPrompts = (() => {
+    const filtered = sensitivityFilteredPrompts.filter(p => {
+      const characterMatch = characterFilter === 'all' || (p.character || 1) === parseInt(characterFilter)
+      const placeMatch = placeFilter === 'all' || p.place === placeFilter
+      const typeMatch = typeFilter === 'all' || p.type === typeFilter
+      const viewMatch = viewFilter === 'all' || p.view === viewFilter
+      const nudityMatch = nudityFilter === 'all' || p.nudity === nudityFilter
 
-    return characterMatch && placeMatch && typeMatch && viewMatch && nudityMatch
-  })
+      return characterMatch && placeMatch && typeMatch && viewMatch && nudityMatch
+    })
+
+    // Sort based on promptSortBy
+    if (promptSortBy === 'mostCopied') {
+      return [...filtered].sort((a, b) => (b.copyCount || 0) - (a.copyCount || 0))
+    }
+    return filtered
+  })()
+
+  const filteredPrompts = filteredAndSortedPrompts
 
   // Get unique values for LoRA filters
   const getLoraUniqueValues = (field) => {
@@ -260,13 +338,25 @@ function App() {
   }
 
   // Filter LoRAs based on active filters
-  const filteredLoras = loras.filter(l => {
-    const genderMatch = loraGenderFilter === 'all' || l.gender === loraGenderFilter
-    const modelMatch = loraModelFilter === 'all' || l.model === loraModelFilter
-    const characterMatch = loraCharacterFilter === 'all' || l.character === loraCharacterFilter
+  const filteredAndSortedLoras = (() => {
+    const filtered = loras.filter(l => {
+      const genderMatch = loraGenderFilter === 'all' || l.gender === loraGenderFilter
+      const modelMatch = loraModelFilter === 'all' || l.model === loraModelFilter
+      const characterMatch = loraCharacterFilter === 'all' || l.character === loraCharacterFilter
 
-    return genderMatch && modelMatch && characterMatch
-  })
+      return genderMatch && modelMatch && characterMatch
+    })
+
+    // Sort based on loraSortBy
+    if (loraSortBy === 'mostCopied') {
+      return [...filtered].sort((a, b) => (b.copyCount || 0) - (a.copyCount || 0))
+    } else if (loraSortBy === 'mostDownloaded') {
+      return [...filtered].sort((a, b) => (b.downloadCount || 0) - (a.downloadCount || 0))
+    }
+    return filtered
+  })()
+
+  const filteredLoras = filteredAndSortedLoras
 
   return (
     <div className="app-container">
@@ -375,6 +465,12 @@ function App() {
                         getUniqueValues('nudity'),
                         (val) => val === 'all' ? `All (${sensitivityFilteredPrompts.length})` : val
                       )}
+
+                      {/* Sort Dropdown */}
+                      {renderSortDropdown(promptSortBy, setPromptSortBy, [
+                        { value: 'default', label: 'Default' },
+                        { value: 'mostCopied', label: 'Most Copied' }
+                      ])}
                     </div>
 
                     <div className="filter-info">
@@ -455,6 +551,13 @@ function App() {
                         getLoraUniqueValues('character'),
                         (val) => val === 'all' ? `All (${loras.length})` : val
                       )}
+
+                      {/* Sort Dropdown */}
+                      {renderSortDropdown(loraSortBy, setLoraSortBy, [
+                        { value: 'default', label: 'Default' },
+                        { value: 'mostCopied', label: 'Most Copied' },
+                        { value: 'mostDownloaded', label: 'Most Downloaded' }
+                      ])}
                     </div>
 
                     <div className="filter-info">
@@ -501,7 +604,7 @@ function App() {
 
             <button
               className="copy-button"
-              onClick={() => handleCopyPrompt(selectedPrompt.prompt)}
+              onClick={() => handleCopyPrompt(selectedPrompt.prompt, selectedPrompt.id, 'prompt')}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -566,14 +669,7 @@ function App() {
               {selectedLora.safetensorsPath && (
                 <button
                   className="lora-action-button"
-                  onClick={() => {
-                    const link = document.createElement('a')
-                    link.href = selectedLora.safetensorsPath
-                    link.download = selectedLora.safetensorsFile
-                    document.body.appendChild(link)
-                    link.click()
-                    document.body.removeChild(link)
-                  }}
+                  onClick={() => handleDownload(selectedLora.id, selectedLora.safetensorsPath, selectedLora.safetensorsFile)}
                   title="Download LoRA file"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -586,7 +682,7 @@ function App() {
               {selectedLora.prompt && (
                 <button
                   className="lora-action-button"
-                  onClick={() => handleCopyPrompt(selectedLora.prompt)}
+                  onClick={() => handleCopyPrompt(selectedLora.prompt, selectedLora.id, 'lora')}
                   title="Copy prompt"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
