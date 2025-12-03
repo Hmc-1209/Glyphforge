@@ -602,6 +602,45 @@ function App() {
               ))}
             </div>
 
+            <div className="prompt-author">
+              Author: {selectedPrompt.author}
+            </div>
+
+            <div className="prompt-meta-info">
+              {selectedPrompt.character && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">Character:</span>
+                  <span className="prompt-meta-value">{selectedPrompt.character}</span>
+                </div>
+              )}
+              {selectedPrompt.place && selectedPrompt.place !== 'Unknown' && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">Place:</span>
+                  <span className="prompt-meta-value">{selectedPrompt.place}</span>
+                </div>
+              )}
+              {selectedPrompt.type && selectedPrompt.type !== 'Unknown' && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">Type:</span>
+                  <span className="prompt-meta-value">{selectedPrompt.type}</span>
+                </div>
+              )}
+              {selectedPrompt.view && selectedPrompt.view !== 'Unknown' && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">View:</span>
+                  <span className="prompt-meta-value">{selectedPrompt.view}</span>
+                </div>
+              )}
+              {selectedPrompt.stability && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">Stability:</span>
+                  <span className={`stability-badge stability-${selectedPrompt.stability}`}>
+                    S{selectedPrompt.stability}
+                  </span>
+                </div>
+              )}
+            </div>
+
             <button
               className="copy-button"
               onClick={() => handleCopyPrompt(selectedPrompt.prompt, selectedPrompt.id, 'prompt')}

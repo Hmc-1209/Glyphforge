@@ -61,7 +61,9 @@ app.get('/api/prompts', async (req, res) => {
         sensitive: 'Unknown',
         type: 'Unknown',
         view: 'Unknown',
-        nudity: 'Unknown'
+        nudity: 'Unknown',
+        stability: null,
+        author: null
       }
       if (fs.existsSync(metaPath)) {
         try {
@@ -108,6 +110,8 @@ app.get('/api/prompts', async (req, res) => {
         type: meta.type || 'Unknown',
         view: meta.view || 'Unknown',
         nudity: meta.nudity || 'Unknown',
+        stability: meta.stability || null,
+        author: meta.author || 'dANNY',
         copyCount: meta.copyCount || 0
       }
     })
