@@ -29,6 +29,9 @@ function App() {
   const [promptSortBy, setPromptSortBy] = useState('default')
   const [loraSortBy, setLoraSortBy] = useState('default')
 
+  // Help modal
+  const [showHelpModal, setShowHelpModal] = useState(false)
+
   // Save sensitivity filter to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('sensitivityFilter', sensitivityFilter)
@@ -398,8 +401,19 @@ function App() {
         <div className="content-area">
           {activeTab === 'prompt' && (
             <div className="tab-content">
-              <h2>Prompt Gallery</h2>
-              <p>Browse and use preset prompt examples</p>
+              <div className="tab-header">
+                <div>
+                  <h2>Prompt Gallery</h2>
+                  <p>Browse and use preset prompt examples</p>
+                </div>
+                <button
+                  className="help-button"
+                  onClick={() => setShowHelpModal(true)}
+                  title="Help & Information"
+                >
+                  ?
+                </button>
+              </div>
 
               <div className="filter-container">
                 <button
@@ -730,6 +744,66 @@ function App() {
                   </svg>
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showHelpModal && (
+        <div className="popup-overlay help-modal-overlay" onClick={() => setShowHelpModal(false)}>
+          <div className="help-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={() => setShowHelpModal(false)}>×</button>
+
+            <h2>Prompt Gallery Guide</h2>
+
+            <div className="help-section">
+              <h3>How to Use</h3>
+              <ul>
+                <li>Click on any prompt card to view details and copy the prompt</li>
+                <li>Use filters to narrow down prompts by character count, place, type, and view</li>
+                <li>Sort by "Most Copied" to find popular prompts</li>
+                <li>Toggle between SFW/NSFW content using the top-right switch</li>
+              </ul>
+            </div>
+
+            <div className="help-section">
+              <h3>Stability Levels</h3>
+              <p>Stability indicates how consistently a prompt produces expected results:</p>
+              <div className="stability-examples">
+                <div className="stability-example">
+                  <span className="stability-badge stability-1">S1</span>
+                  <div>
+                    <strong>High Stability</strong>
+                    <p>Produces consistent results. Minimal "gacha" needed.</p>
+                  </div>
+                </div>
+                <div className="stability-example">
+                  <span className="stability-badge stability-2">S2</span>
+                  <div>
+                    <strong>Medium Stability</strong>
+                    <p>Moderately consistent. Some variation expected.</p>
+                  </div>
+                </div>
+                <div className="stability-example">
+                  <span className="stability-badge stability-3">S3</span>
+                  <div>
+                    <strong>Low Stability</strong>
+                    <p>Results vary significantly. More "gacha" required.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="help-section">
+              <h3>Meta Information</h3>
+              <p>Each prompt includes:</p>
+              <ul>
+                <li><strong>Author:</strong> Creator of the prompt</li>
+                <li><strong>Character:</strong> Number of characters in the scene</li>
+                <li><strong>Place:</strong> Scene location (Indoor, Outdoor, etc.)</li>
+                <li><strong>Type:</strong> Scene type or action (Standing, Sitting, Running, etc.)</li>
+                <li><strong>View:</strong> Camera angle (Front, Back, Side, etc.)</li>
+              </ul>
             </div>
           </div>
         </div>
