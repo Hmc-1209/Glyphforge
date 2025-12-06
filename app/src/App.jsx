@@ -192,7 +192,7 @@ function App() {
                       setOpenDropdown(null)
                     }}
                   >
-                    {getLabel(option)} ({prompts.filter(p => p[filterId] ? p[filterId].toString() === option.toString() : false).length})
+                    {getLabel(option)} ({sensitivityFilteredPrompts.filter(p => p[filterId] ? p[filterId].toString() === option.toString() : false).length})
                   </div>
                 ))}
               </div>
@@ -336,7 +336,11 @@ function App() {
 
   // Get unique values for LoRA filters
   const getLoraUniqueValues = (field) => {
-    const values = new Set(loras.map(l => l[field] || 'Unknown').filter(v => v && v !== ''))
+    const values = new Set(
+      loras
+        .map(l => l[field])
+        .filter(v => v && v !== '' && v !== 'Unknown')
+    )
     return Array.from(values).sort()
   }
 
