@@ -874,6 +874,115 @@ label {
   font-weight: 400;
 }
 
+/* Custom Version Select Dropdown */
+.custom-version-select-wrapper {
+  position: relative;
+  min-width: 160px;
+}
+
+.custom-version-select {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+
+.custom-version-select-trigger {
+  background: linear-gradient(145deg, rgba(31, 35, 50, 0.9) 0%, rgba(42, 47, 62, 0.9) 100%);
+  border: 1px solid rgba(99, 130, 191, 0.25);
+  border-radius: 8px;
+  color: #e4e6eb;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(99, 130, 191, 0.1);
+}
+
+.custom-version-select-trigger:hover {
+  background: linear-gradient(145deg, rgba(42, 47, 62, 0.9) 0%, rgba(52, 57, 72, 0.9) 100%);
+  border-color: rgba(99, 130, 191, 0.4);
+  box-shadow:
+    0 3px 12px rgba(99, 130, 191, 0.15),
+    inset 0 1px 0 rgba(99, 130, 191, 0.15);
+}
+
+.custom-version-arrow {
+  color: #8ba4d0;
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+
+.custom-version-arrow.open {
+  transform: rotate(180deg);
+}
+
+.custom-version-options {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  background: linear-gradient(145deg, rgba(45, 51, 66, 0.98) 0%, rgba(35, 40, 55, 0.98) 100%);
+  border: 1px solid rgba(99, 130, 191, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 1000;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(99, 130, 191, 0.2);
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.custom-version-option {
+  padding: 0.6rem 1rem;
+  color: #e4e6eb;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid rgba(99, 130, 191, 0.1);
+}
+
+.custom-version-option:last-child {
+  border-bottom: none;
+}
+
+.custom-version-option:hover {
+  background: rgba(99, 130, 191, 0.25);
+  color: #a8c0e8;
+}
+
+.custom-version-option.selected {
+  background: rgba(99, 130, 191, 0.2);
+  color: #a8c0e8;
+  font-weight: 600;
+  position: relative;
+}
+
+.custom-version-option.selected::before {
+  content: '✓';
+  position: absolute;
+  right: 1rem;
+  color: #6382bf;
+  font-weight: bold;
+}
+
 /* LoRA Actions */
 .lora-actions {
   display: flex;

@@ -7,6 +7,8 @@ function App() {
   const [selectedPrompt, setSelectedPrompt] = useState(null)
   const [loras, setLoras] = useState([])
   const [selectedLora, setSelectedLora] = useState(null)
+  const [selectedLoraVersion, setSelectedLoraVersion] = useState(null)
+  const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false)
   const [sensitivityFilter, setSensitivityFilter] = useState(() => {
     // Load from localStorage, default to 'sfw' for new users
     return localStorage.getItem('sensitivityFilter') || 'sfw'
@@ -86,6 +88,7 @@ function App() {
         }
         if (selectedLora) {
           setSelectedLora(null)
+          setSelectedLoraVersion(null)
         }
       }
     }
@@ -93,6 +96,15 @@ function App() {
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
   }, [selectedPrompt, selectedLora])
+
+  // Initialize selected version when LoRA is selected
+  useEffect(() => {
+    if (selectedLora && selectedLora.versions && selectedLora.versions.length > 0) {
+      setSelectedLoraVersion(selectedLora.versions[0])
+    } else {
+      setSelectedLoraVersion(null)
+    }
+  }, [selectedLora])
 
   const handleCopyPrompt = async (promptText, itemId, itemType) => {
     try {
@@ -109,12 +121,12 @@ function App() {
     }
   }
 
-  const handleDownload = async (loraId, safetensorsPath, safetensorsFile) => {
+  const handleDownload = async (loraId, version) => {
     try {
       // Trigger download
       const link = document.createElement('a')
-      link.href = safetensorsPath
-      link.download = safetensorsFile
+      link.href = version.filePath
+      link.download = version.fileName
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -707,27 +719,62 @@ function App() {
                   <span className="lora-meta-value">{selectedLora.model}</span>
                 </div>
               )}
+              {selectedLora.hasMultipleVersions && selectedLora.versions && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Version:</span>
+                  <div className="custom-version-select-wrapper">
+                    <div
+                      className="custom-version-select"
+                      onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
+                    >
+                      <div className="custom-version-select-trigger">
+                        <span>{selectedLoraVersion ? selectedLoraVersion.displayName : 'Select version'}</span>
+                        <svg className={`custom-version-arrow ${isVersionDropdownOpen ? 'open' : ''}`} width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      {isVersionDropdownOpen && (
+                        <div className="custom-version-options">
+                          {selectedLora.versions.map((version) => (
+                            <div
+                              key={version.name}
+                              className={`custom-version-option ${selectedLoraVersion && selectedLoraVersion.name === version.name ? 'selected' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedLoraVersion(version)
+                                setIsVersionDropdownOpen(false)
+                              }}
+                            >
+                              {version.displayName}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="lora-actions">
-              {selectedLora.link && (
+              {/* External link button - temporarily disabled */}
+              <button
+                className="lora-action-button"
+                disabled
+                title="External link (temporarily unavailable)"
+                style={{ opacity: 0.3, cursor: 'not-allowed' }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </button>
+              {selectedLoraVersion && selectedLoraVersion.filePath && (
                 <button
                   className="lora-action-button"
-                  onClick={() => window.open(selectedLora.link, '_blank')}
-                  title="Open external link"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                    <polyline points="15 3 21 3 21 9"></polyline>
-                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                  </svg>
-                </button>
-              )}
-              {selectedLora.safetensorsPath && (
-                <button
-                  className="lora-action-button"
-                  onClick={() => handleDownload(selectedLora.id, selectedLora.safetensorsPath, selectedLora.safetensorsFile)}
-                  title="Download LoRA file"
+                  onClick={() => handleDownload(selectedLora.id, selectedLoraVersion)}
+                  title={`Download ${selectedLoraVersion.name} version`}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>

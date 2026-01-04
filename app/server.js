@@ -165,9 +165,47 @@ app.get('/api/loras', async (req, res) => {
         ? `${meta.character}-${meta.cloth}`
         : meta.character
 
-      // Find .safetensors file
+      // Find all .safetensors files
       const files = fs.readdirSync(folderPath)
-      const safetensorsFile = files.find(file => file.endsWith('.safetensors'))
+      const safetensorsFiles = files.filter(file => file.endsWith('.safetensors'))
+
+      // Process model information (support both array and string formats)
+      let modelInfo = meta.model || ''
+      let modelMap = {}
+
+      // If model is an array, create a map for version lookup
+      if (Array.isArray(meta.model)) {
+        meta.model.forEach(m => {
+          const key = m.name.toLowerCase()
+          modelMap[key] = `${m.name} ${m.version}`
+        })
+        // For display, join all model info
+        modelInfo = meta.model.map(m => `${m.name} ${m.version}`).join(', ')
+      }
+
+      // Extract version information from filenames
+      // Format: CharacterName(version).safetensors
+      const versions = safetensorsFiles.map(file => {
+        const match = file.match(/\(([^)]+)\)\.safetensors$/)
+        const versionName = match ? match[1] : 'default'
+
+        // Try to find corresponding model info
+        let displayName = versionName
+        if (Object.keys(modelMap).length > 0) {
+          const modelKey = versionName.toLowerCase()
+          displayName = modelMap[modelKey] || versionName
+        }
+
+        return {
+          name: versionName,
+          displayName: displayName,
+          fileName: file,
+          filePath: `/${LORA_FOLDER_NAME}/character/${folder}/${file}`
+        }
+      })
+
+      // For backward compatibility, use first file as default
+      const defaultVersion = versions[0] || { name: '', displayName: '', fileName: '', filePath: '' }
 
       return {
         id: folder,
@@ -176,13 +214,17 @@ app.get('/api/loras', async (req, res) => {
         preview: fs.existsSync(previewPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/1.png` : '',
         link: meta.link || '',
         prompt: meta.prompt || '',
-        safetensorsFile: safetensorsFile || '',
-        safetensorsPath: safetensorsFile ? `/${LORA_FOLDER_NAME}/character/${folder}/${safetensorsFile}` : '',
+        // Legacy fields for backward compatibility
+        safetensorsFile: defaultVersion.fileName,
+        safetensorsPath: defaultVersion.filePath,
+        // New fields for multiple versions
+        versions: versions,
+        hasMultipleVersions: versions.length > 1,
         // Include all meta fields
         character: meta.character || folder,
         cloth: meta.cloth || '',
         gender: meta.gender || '',
-        model: meta.model || '',
+        model: modelInfo,
         copyCount: meta.copyCount || 0,
         downloadCount: meta.downloadCount || 0
       }
