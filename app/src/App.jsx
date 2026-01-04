@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import './App.css'
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 function App() {
   const [activeTab, setActiveTab] = useState('prompt')
@@ -9,6 +10,7 @@ function App() {
   const [selectedLora, setSelectedLora] = useState(null)
   const [selectedLoraVersion, setSelectedLoraVersion] = useState(null)
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false)
+  const [statistics, setStatistics] = useState(null)
   const [sensitivityFilter, setSensitivityFilter] = useState(() => {
     // Load from localStorage, default to 'sfw' for new users
     return localStorage.getItem('sensitivityFilter') || 'sfw'
@@ -78,6 +80,22 @@ function App() {
     }
     loadLoras()
   }, [])
+
+  useEffect(() => {
+    const loadStatistics = async () => {
+      try {
+        const response = await fetch(`/api/statistics?sensitivity=${sensitivityFilter}`)
+        const data = await response.json()
+        setStatistics(data)
+      } catch (error) {
+        console.error('Failed to load statistics:', error)
+        setStatistics(null)
+      }
+    }
+    if (activeTab === 'statistics') {
+      loadStatistics()
+    }
+  }, [activeTab, sensitivityFilter])
 
   // Handle ESC key to close popups
   useEffect(() => {
@@ -412,6 +430,12 @@ function App() {
           >
             LoRA
           </button>
+          <button
+            className={`tab ${activeTab === 'statistics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('statistics')}
+          >
+            Statistics
+          </button>
         </div>
 
         <div className="content-area">
@@ -616,6 +640,318 @@ function App() {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'statistics' && (
+            <div className="tab-content statistics-content">
+              <h2>Statistics Dashboard</h2>
+              <p>
+                Overview of prompts and LoRA usage data
+                {sensitivityFilter !== 'all' && (
+                  <span className="stats-filter-badge">
+                    {' '}· Filtered by: {sensitivityFilter.toUpperCase()}
+                  </span>
+                )}
+              </p>
+
+              {!statistics ? (
+                <div className="loading-message">Loading statistics...</div>
+              ) : (
+                <div className="statistics-grid">
+                  {/* Overview Cards */}
+                  <div className="stats-overview">
+                    <div className="stat-card">
+                      <div className="stat-icon">📝</div>
+                      <div className="stat-info">
+                        <div className="stat-value">{statistics.prompts.total}</div>
+                        <div className="stat-label">Total Prompts</div>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-icon">🎨</div>
+                      <div className="stat-info">
+                        <div className="stat-value">{statistics.loras.total}</div>
+                        <div className="stat-label">Total LoRAs</div>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-icon">⬇️</div>
+                      <div className="stat-info">
+                        <div className="stat-value">{statistics.loras.totalDownloads}</div>
+                        <div className="stat-label">Total Downloads</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Prompt Statistics */}
+                  <div className="chart-section">
+                    <h3>Prompt Statistics</h3>
+
+                    <div className="chart-container">
+                      <h4>Top 10 Most Copied Prompts</h4>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={statistics.prompts.topCopied}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 130, 191, 0.2)" />
+                          <XAxis
+                            dataKey="name"
+                            stroke="#8ba4d0"
+                            tick={{ fill: '#8ba4d0' }}
+                          />
+                          <YAxis
+                            stroke="#8ba4d0"
+                            tick={{ fill: '#8ba4d0' }}
+                          />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload
+                                return (
+                                  <div className="custom-chart-tooltip">
+                                    {data.thumbnail && (
+                                      <img
+                                        src={data.thumbnail}
+                                        alt={data.name}
+                                        className="tooltip-preview"
+                                      />
+                                    )}
+                                    <div className="tooltip-info">
+                                      <p className="tooltip-label">{data.name}</p>
+                                      <p className="tooltip-value">Copies: {data.copyCount}</p>
+                                      <p className="tooltip-meta">Place: {data.place}</p>
+                                      <p className="tooltip-meta">Characters: {data.character}</p>
+                                    </div>
+                                  </div>
+                                )
+                              }
+                              return null
+                            }}
+                          />
+                          <Bar dataKey="copyCount" fill="#6382bf" radius={[8, 8, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="chart-row">
+                      <div className="chart-container half-width">
+                        <h4>Prompts by Character Count</h4>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                            <Pie
+                              data={Object.entries(statistics.prompts.byCharacter).map(([key, value]) => ({
+                                name: `${key} Character${key > 1 ? 's' : ''}`,
+                                value: value
+                              }))}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={70}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {Object.keys(statistics.prompts.byCharacter).map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={['#6382bf', '#8ba4d0', '#4a5f8f', '#5a7bb3', '#3d4f73'][index % 5]} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'rgba(35, 40, 55, 0.98)',
+                                border: '1px solid rgba(99, 130, 191, 0.3)',
+                                borderRadius: '8px',
+                                color: '#e4e6eb'
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="chart-container half-width">
+                        <h4>Prompts by Sensitivity</h4>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                            <Pie
+                              data={Object.entries(statistics.prompts.bySensitivity).map(([key, value]) => ({
+                                name: key,
+                                value: value
+                              }))}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={70}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              <Cell fill="#6382bf" />
+                              <Cell fill="#e07a5f" />
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'rgba(35, 40, 55, 0.98)',
+                                border: '1px solid rgba(99, 130, 191, 0.3)',
+                                borderRadius: '8px',
+                                color: '#e4e6eb'
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    <div className="chart-container">
+                      <h4>Prompts by Type</h4>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={Object.entries(statistics.prompts.byType).map(([key, value]) => ({
+                          name: key,
+                          count: value
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 130, 191, 0.2)" />
+                          <XAxis
+                            dataKey="name"
+                            stroke="#8ba4d0"
+                            tick={{ fill: '#8ba4d0' }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={100}
+                          />
+                          <YAxis
+                            stroke="#8ba4d0"
+                            tick={{ fill: '#8ba4d0' }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'rgba(35, 40, 55, 0.98)',
+                              border: '1px solid rgba(99, 130, 191, 0.3)',
+                              borderRadius: '8px',
+                              color: '#e4e6eb'
+                            }}
+                          />
+                          <Bar dataKey="count" fill="#8ba4d0" radius={[8, 8, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* LoRA Statistics */}
+                  <div className="chart-section">
+                    <h3>LoRA Statistics</h3>
+
+                    <div className="chart-container">
+                      <h4>Top 10 Most Downloaded LoRAs</h4>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={statistics.loras.topDownloaded}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 130, 191, 0.2)" />
+                          <XAxis
+                            dataKey="name"
+                            stroke="#8ba4d0"
+                            tick={{ fill: '#8ba4d0' }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={100}
+                          />
+                          <YAxis
+                            stroke="#8ba4d0"
+                            tick={{ fill: '#8ba4d0' }}
+                          />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload
+                                return (
+                                  <div className="custom-chart-tooltip">
+                                    {data.thumbnail && (
+                                      <img
+                                        src={data.thumbnail}
+                                        alt={data.name}
+                                        className="tooltip-preview"
+                                      />
+                                    )}
+                                    <div className="tooltip-info">
+                                      <p className="tooltip-label">{data.name}</p>
+                                      <p className="tooltip-value">Downloads: {data.downloadCount}</p>
+                                    </div>
+                                  </div>
+                                )
+                              }
+                              return null
+                            }}
+                          />
+                          <Bar dataKey="downloadCount" fill="#6382bf" radius={[8, 8, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="chart-row">
+                      <div className="chart-container half-width">
+                        <h4>LoRAs by Gender</h4>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                            <Pie
+                              data={Object.entries(statistics.loras.byGender).map(([key, value]) => ({
+                                name: key,
+                                value: value
+                              }))}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={70}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {Object.keys(statistics.loras.byGender).map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={['#6382bf', '#e07a5f', '#8ba4d0'][index % 3]} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'rgba(35, 40, 55, 0.98)',
+                                border: '1px solid rgba(99, 130, 191, 0.3)',
+                                borderRadius: '8px',
+                                color: '#e4e6eb'
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="chart-container half-width">
+                        <h4>LoRAs by Model</h4>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                            <Pie
+                              data={Object.entries(statistics.loras.byModel).map(([key, value]) => ({
+                                name: key,
+                                value: value
+                              }))}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={70}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {Object.keys(statistics.loras.byModel).map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={['#6382bf', '#8ba4d0', '#4a5f8f', '#5a7bb3', '#3d4f73'][index % 5]} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'rgba(35, 40, 55, 0.98)',
+                                border: '1px solid rgba(99, 130, 191, 0.3)',
+                                borderRadius: '8px',
+                                color: '#e4e6eb'
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

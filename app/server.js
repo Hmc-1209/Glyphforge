@@ -297,6 +297,134 @@ app.post('/api/loras/:id/download', (req, res) => {
   }
 })
 
+// API route - get statistics
+app.get('/api/statistics', (req, res) => {
+  try {
+    // Get sensitivity filter from query params (sfw, nsfw, all)
+    const sensitivityFilter = req.query.sensitivity || 'all'
+
+    const stats = {
+      prompts: {
+        total: 0,
+        byCharacter: {},
+        byPlace: {},
+        byType: {},
+        topCopied: [],
+        bySensitivity: { SFW: 0, NSFW: 0 }
+      },
+      loras: {
+        total: 0,
+        byGender: {},
+        byModel: {},
+        topDownloaded: [],
+        totalDownloads: 0
+      }
+    }
+
+    // Collect prompt statistics
+    const promptFolders = fs.readdirSync(PROMPT_FOLDER_PATH)
+      .filter(item => fs.statSync(path.join(PROMPT_FOLDER_PATH, item)).isDirectory())
+
+    promptFolders.forEach(folder => {
+      const folderPath = path.join(PROMPT_FOLDER_PATH, folder)
+      const metaPath = path.join(folderPath, 'meta.json')
+      if (fs.existsSync(metaPath)) {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+
+        // Apply sensitivity filter
+        const promptSensitive = meta.sensitive || 'SFW'
+        if (sensitivityFilter === 'sfw' && promptSensitive !== 'SFW') return
+        if (sensitivityFilter === 'nsfw' && promptSensitive !== 'NSFW') return
+        // if sensitivityFilter === 'all', include everything
+        stats.prompts.total++
+
+        // By character count
+        const charCount = meta.character || 1
+        stats.prompts.byCharacter[charCount] = (stats.prompts.byCharacter[charCount] || 0) + 1
+
+        // By place
+        const place = meta.place || 'Unknown'
+        stats.prompts.byPlace[place] = (stats.prompts.byPlace[place] || 0) + 1
+
+        // By type
+        const type = meta.type || 'Unknown'
+        stats.prompts.byType[type] = (stats.prompts.byType[type] || 0) + 1
+
+        // By sensitivity
+        const sensitive = meta.sensitive || 'SFW'
+        stats.prompts.bySensitivity[sensitive] = (stats.prompts.bySensitivity[sensitive] || 0) + 1
+
+        // Top copied
+        const thumbnailPath = path.join(folderPath, '1.png')
+        // Create unique display name using serial number and type
+        const serialNumber = meta['serial-number'] !== undefined ? meta['serial-number'] : folder
+        const displayName = `#${serialNumber} - ${meta.type || 'Unknown'}`
+        stats.prompts.topCopied.push({
+          id: folder,
+          name: displayName,
+          type: meta.type || 'Unknown',
+          place: meta.place || 'Unknown',
+          character: meta.character || 1,
+          copyCount: meta.copyCount || 0,
+          thumbnail: fs.existsSync(thumbnailPath) ? `/${PROMPT_FOLDER_NAME}/${folder}/1.png` : ''
+        })
+      }
+    })
+
+    // Sort top copied prompts
+    stats.prompts.topCopied.sort((a, b) => b.copyCount - a.copyCount)
+    stats.prompts.topCopied = stats.prompts.topCopied.slice(0, 10)
+
+    // Collect LoRA statistics
+    const loraCharacterPath = path.join(LORA_FOLDER_PATH, 'character')
+    const loraFolders = fs.readdirSync(loraCharacterPath)
+      .filter(item => fs.statSync(path.join(loraCharacterPath, item)).isDirectory())
+
+    loraFolders.forEach(folder => {
+      const metaPath = path.join(loraCharacterPath, folder, 'meta.json')
+      if (fs.existsSync(metaPath)) {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+        stats.loras.total++
+
+        // By gender
+        const gender = meta.gender || 'Unknown'
+        stats.loras.byGender[gender] = (stats.loras.byGender[gender] || 0) + 1
+
+        // By model
+        let modelInfo = 'Unknown'
+        if (Array.isArray(meta.model)) {
+          meta.model.forEach(m => {
+            const modelName = m.name || 'Unknown'
+            stats.loras.byModel[modelName] = (stats.loras.byModel[modelName] || 0) + 1
+          })
+        } else if (meta.model) {
+          stats.loras.byModel[meta.model] = (stats.loras.byModel[meta.model] || 0) + 1
+        }
+
+        // Top downloaded
+        const downloadCount = meta.downloadCount || 0
+        stats.loras.totalDownloads += downloadCount
+        const loraThumbnailPath = path.join(loraCharacterPath, folder, '0.png')
+        stats.loras.topDownloaded.push({
+          id: folder,
+          name: meta.character || folder,
+          downloadCount: downloadCount,
+          thumbnail: fs.existsSync(loraThumbnailPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/0.png` : ''
+        })
+      }
+    })
+
+    // Sort top downloaded LoRAs
+    stats.loras.topDownloaded.sort((a, b) => b.downloadCount - a.downloadCount)
+    stats.loras.topDownloaded = stats.loras.topDownloaded.slice(0, 10)
+
+    res.json(stats)
+  } catch (error) {
+    console.error('Error getting statistics:', error)
+    res.status(500).json({ error: 'Failed to get statistics' })
+  }
+})
+
 // API route - get configuration
 app.get('/api/config', (req, res) => {
   res.json(config)
