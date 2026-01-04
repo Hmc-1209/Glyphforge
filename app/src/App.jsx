@@ -691,7 +691,10 @@ function App() {
                     <div className="chart-container">
                       <h4>Top 10 Most Copied Prompts</h4>
                       <ResponsiveContainer width="100%" height={250}>
-                        <BarChart data={statistics.prompts.topCopied}>
+                        <BarChart
+                          data={statistics.prompts.topCopied}
+                          barCategoryGap="20%"
+                        >
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 130, 191, 0.2)" />
                           <XAxis
                             dataKey="name"
@@ -703,6 +706,7 @@ function App() {
                             tick={{ fill: '#8ba4d0' }}
                           />
                           <Tooltip
+                            cursor={{ fill: 'rgba(99, 130, 191, 0.08)' }}
                             content={({ active, payload }) => {
                               if (active && payload && payload.length) {
                                 const data = payload[0].payload
@@ -820,6 +824,7 @@ function App() {
                             tick={{ fill: '#8ba4d0' }}
                           />
                           <Tooltip
+                            cursor={{ fill: 'rgba(99, 130, 191, 0.08)' }}
                             contentStyle={{
                               backgroundColor: 'rgba(35, 40, 55, 0.98)',
                               border: '1px solid rgba(99, 130, 191, 0.3)',
@@ -855,6 +860,7 @@ function App() {
                             tick={{ fill: '#8ba4d0' }}
                           />
                           <Tooltip
+                            cursor={{ fill: 'rgba(99, 130, 191, 0.08)' }}
                             content={({ active, payload }) => {
                               if (active && payload && payload.length) {
                                 const data = payload[0].payload

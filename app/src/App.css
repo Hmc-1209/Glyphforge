@@ -1291,18 +1291,9 @@ label {
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  transition: all 0.3s ease;
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(99, 130, 191, 0.1);
-}
-
-.stat-card:hover {
-  border-color: rgba(99, 130, 191, 0.4);
-  box-shadow:
-    0 6px 24px rgba(99, 130, 191, 0.15),
-    inset 0 1px 0 rgba(99, 130, 191, 0.15);
-  transform: translateY(-2px);
 }
 
 .stat-icon {
@@ -1415,6 +1406,30 @@ label {
   color: #9ca3b4;
   font-size: 0.85rem;
   margin: 0;
+}
+
+/* Recharts hover background customization */
+.recharts-bar-rectangle:hover,
+.recharts-rectangle:hover {
+  opacity: 0.8;
+}
+
+.recharts-active-bar {
+  filter: brightness(1.1);
+}
+
+/* Override recharts default hover background */
+.recharts-wrapper .recharts-surface {
+  overflow: visible;
+}
+
+.recharts-layer.recharts-bar-background-rectangle {
+  fill: rgba(31, 35, 50, 0.15) !important;
+}
+
+/* Hover background for chart items */
+.recharts-bar rect:hover {
+  filter: brightness(1.15);
 }
 
 /* Responsive adjustments */
