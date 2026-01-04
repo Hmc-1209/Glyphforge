@@ -1,124 +1,124 @@
-# Glyphforge NAS 部署指南
+# Glyphforge NAS Deployment Guide
 
-## 📋 前置需求
+## Prerequisites
 
-### NAS 系統需求
-- Linux 系統（Synology DSM, QNAP QTS, TrueNAS, 等）
-- Docker 已安裝
-- Docker Compose 已安裝
-- SSH 訪問權限
+### NAS System Requirements
+- Linux system (Synology DSM, QNAP QTS, TrueNAS, etc.)
+- Docker installed
+- Docker Compose installed
+- SSH access
 
-### 檢查 Docker 安裝
+### Check Docker Installation
 ```bash
 docker --version
 docker-compose --version
-# 或
+# or
 docker compose version
 ```
 
-## 🚀 快速部署
+## Quick Deployment
 
-### 1. 上傳檔案到 NAS
+### 1. Upload Files to NAS
 
-使用 SCP 或 SFTP 上傳整個 `app` 資料夾到 NAS：
+Use SCP or SFTP to upload the entire `app` folder to your NAS:
 
 ```bash
-# 從本地電腦執行（Windows 使用 PowerShell 或 Git Bash）
+# Execute from local computer (Windows use PowerShell or Git Bash)
 scp -r app/ user@nas-ip:/volume1/docker/glyphforge/
 
-# 或使用 rsync（推薦）
+# Or use rsync (recommended)
 rsync -avz --progress app/ user@nas-ip:/volume1/docker/glyphforge/
 ```
 
-### 2. SSH 連接到 NAS
+### 2. SSH Connect to NAS
 
 ```bash
 ssh user@nas-ip
 cd /volume1/docker/glyphforge
 ```
 
-### 3. 配置 Volume 路徑
+### 3. Configure Volume Path
 
-編輯 `docker-compose.yml` 或使用 NAS 專用配置：
+Edit `docker-compose.yml` or use NAS-specific configuration:
 
 ```bash
-# 方法一：直接編輯 docker-compose.yml
+# Method 1: Edit docker-compose.yml directly
 nano docker-compose.yml
 
-# 方法二：使用 NAS 專用配置
+# Method 2: Use NAS-specific configuration
 cp docker-compose.nas.yml docker-compose.yml
 nano docker-compose.yml
 ```
 
-修改 volume 路徑為你 NAS 上的實際路徑：
+Modify the volume path to your actual NAS path:
 ```yaml
 volumes:
   - /volume1/your-path/prompt:/data/prompt
 ```
 
-### 4. 執行部署腳本
+### 4. Run Deployment Script
 
 ```bash
-# 添加執行權限
+# Add execute permission
 chmod +x deploy-nas.sh
 
-# 執行部署
+# Execute deployment
 ./deploy-nas.sh
 ```
 
-## 📝 手動部署步驟
+## Manual Deployment Steps
 
-如果你想手動控制每個步驟：
+If you want to manually control each step:
 
-### 1. 建立 Docker 映像
+### 1. Build Docker Image
 ```bash
 docker build -t glyphforge .
 ```
 
-### 2. 啟動容器
+### 2. Start Container
 ```bash
-# 使用 docker compose v2
+# Using docker compose v2
 docker compose up -d
 
-# 或使用舊版 docker-compose
+# Or using legacy docker-compose
 docker-compose up -d
 ```
 
-### 3. 檢查狀態
+### 3. Check Status
 ```bash
 docker ps -f name=glyphforge-app
 docker logs glyphforge-app
 ```
 
-## 🔧 常見 NAS 配置
+## Common NAS Configurations
 
 ### Synology DSM
 
-1. **啟用 SSH**
-   - 控制台 → 終端機和 SNMP → 啟用 SSH 服務
+1. **Enable SSH**
+   - Control Panel → Terminal & SNMP → Enable SSH service
 
-2. **安裝 Docker**
-   - 套件中心 → 搜尋 "Docker" → 安裝
+2. **Install Docker**
+   - Package Center → Search "Docker" → Install
 
-3. **路徑範例**
+3. **Path Example**
    ```yaml
    volumes:
      - /volume1/docker/glyphforge-data/prompt:/data/prompt
    ```
 
-4. **防火牆設定**
-   - 控制台 → 安全性 → 防火牆
-   - 允許端口 5173 和 3001
+4. **Firewall Settings**
+   - Control Panel → Security → Firewall
+   - Allow ports 5173 and 3001
 
 ### QNAP QTS
 
-1. **啟用 SSH**
-   - 控制台 → 網路與檔案服務 → Telnet / SSH
+1. **Enable SSH**
+   - Control Panel → Network & File Services → Telnet / SSH
 
-2. **安裝 Container Station**
+2. **Install Container Station**
    - App Center → Container Station
 
-3. **路徑範例**
+3. **Path Example**
    ```yaml
    volumes:
      - /share/Container/glyphforge-data/prompt:/data/prompt
@@ -126,34 +126,34 @@ docker logs glyphforge-app
 
 ### TrueNAS / FreeNAS
 
-1. **啟用 SSH**
-   - Services → SSH → 啟動
+1. **Enable SSH**
+   - Services → SSH → Start
 
-2. **路徑範例**
+2. **Path Example**
    ```yaml
    volumes:
      - /mnt/tank/docker/glyphforge-data/prompt:/data/prompt
    ```
 
-## 🌐 網路配置
+## Network Configuration
 
-### 內網訪問
-容器啟動後，可以通過以下方式訪問：
+### LAN Access
+After the container starts, you can access it via:
 
 ```bash
-# 本機訪問
+# Local access
 http://localhost:5173
 
-# 區域網路訪問（其他設備）
+# LAN access (other devices)
 http://NAS-IP:5173
 
-# 例如
+# Example
 http://192.168.1.100:5173
 ```
 
-### 設定反向代理（推薦）
+### Setup Reverse Proxy (Recommended)
 
-#### Nginx 反向代理範例
+#### Nginx Reverse Proxy Example
 ```nginx
 server {
     listen 80;
@@ -176,191 +176,191 @@ server {
 }
 ```
 
-#### Synology 內建反向代理
-1. 控制台 → 登入入口網站 → 進階 → 反向代理伺服器
-2. 新增規則：
-   - 來源：`https://glyphforge.your-domain.com`
-   - 目的地：`http://localhost:5173`
+#### Synology Built-in Reverse Proxy
+1. Control Panel → Login Portal → Advanced → Reverse Proxy
+2. Create new rule:
+   - Source: `https://glyphforge.your-domain.com`
+   - Destination: `http://localhost:5173`
 
-## 🔒 安全建議
+## Security Recommendations
 
-### 1. 限制訪問
+### 1. Restrict Access
 ```bash
-# 只允許本地訪問（docker-compose.yml）
+# Allow local access only (docker-compose.yml)
 ports:
   - "127.0.0.1:3001:3001"
   - "127.0.0.1:5173:5173"
 ```
 
-### 2. 使用防火牆
+### 2. Use Firewall
 ```bash
-# UFW 範例
+# UFW example
 sudo ufw allow from 192.168.1.0/24 to any port 5173
 sudo ufw allow from 192.168.1.0/24 to any port 3001
 ```
 
-### 3. 設定 HTTPS
-使用 Let's Encrypt 和 Nginx：
+### 3. Setup HTTPS
+Using Let's Encrypt and Nginx:
 ```bash
 certbot --nginx -d glyphforge.your-domain.com
 ```
 
-## 📊 監控和維護
+## Monitoring and Maintenance
 
-### 查看日誌
+### View Logs
 ```bash
-# 即時日誌
+# Real-time logs
 docker logs -f glyphforge-app
 
-# 最近 100 行
+# Last 100 lines
 docker logs --tail 100 glyphforge-app
 
-# docker-compose 日誌
+# docker-compose logs
 docker-compose logs -f
 ```
 
-### 資源監控
+### Resource Monitoring
 ```bash
-# 即時資源使用
+# Real-time resource usage
 docker stats glyphforge-app
 
-# 一次性查看
+# One-time view
 docker stats --no-stream glyphforge-app
 ```
 
-### 自動重啟
-配置在 `docker-compose.yml` 中：
+### Auto Restart
+Configured in `docker-compose.yml`:
 ```yaml
 restart: unless-stopped
 ```
 
-### 定期更新
+### Regular Updates
 ```bash
-# 重新部署
+# Redeploy
 ./deploy-nas.sh
 
-# 或手動
+# Or manually
 docker-compose down
 docker-compose up -d --build
 ```
 
-## 🔄 備份和還原
+## Backup and Restore
 
-### 備份
+### Backup
 ```bash
-# 備份容器
+# Backup container
 docker commit glyphforge-app glyphforge-backup
 
-# 導出映像
+# Export image
 docker save glyphforge-backup > glyphforge-backup.tar
 
-# 備份 volume 資料
+# Backup volume data
 tar -czf prompt-backup.tar.gz /volume1/your-path/prompt/
 ```
 
-### 還原
+### Restore
 ```bash
-# 導入映像
+# Import image
 docker load < glyphforge-backup.tar
 
-# 還原 volume 資料
+# Restore volume data
 tar -xzf prompt-backup.tar.gz -C /
 ```
 
-## 🐛 故障排除
+## Troubleshooting
 
-### 容器無法啟動
+### Container Won't Start
 ```bash
-# 檢查詳細錯誤
+# Check detailed errors
 docker logs glyphforge-app
 
-# 檢查配置
+# Check configuration
 docker-compose config
 
-# 檢查端口占用
+# Check port usage
 netstat -tlnp | grep -E ':(5173|3001)'
 ```
 
-### Volume 權限問題
+### Volume Permission Issues
 ```bash
-# 檢查目錄權限
+# Check directory permissions
 ls -la /volume1/your-path/prompt/
 
-# 修復權限
+# Fix permissions
 sudo chown -R 1000:1000 /volume1/your-path/prompt/
 sudo chmod -R 755 /volume1/your-path/prompt/
 ```
 
-### 網路問題
+### Network Issues
 ```bash
-# 檢查容器網路
+# Check container network
 docker network inspect bridge
 
-# 檢查容器 IP
+# Check container IP
 docker inspect glyphforge-app | grep IPAddress
 ```
 
-### 記憶體不足
+### Out of Memory
 ```bash
-# 清理未使用的資源
+# Clean unused resources
 docker system prune -a
 
-# 檢查磁碟空間
+# Check disk space
 df -h
 
-# 限制容器資源（docker-compose.yml）
+# Limit container resources (docker-compose.yml)
 deploy:
   resources:
     limits:
       memory: 1G
 ```
 
-## 📱 行動裝置訪問
+## Mobile Device Access
 
-### 區域網路
-直接訪問 NAS IP：
+### LAN
+Direct access to NAS IP:
 ```
 http://192.168.1.100:5173
 ```
 
-### 外網訪問（需要設定 DDNS）
-1. 設定 DDNS
-2. 路由器端口轉發：5173 → NAS:5173
-3. 訪問：`http://your-ddns.com:5173`
+### External Access (requires DDNS setup)
+1. Setup DDNS
+2. Router port forwarding: 5173 → NAS:5173
+3. Access: `http://your-ddns.com:5173`
 
-### 使用 Tailscale（推薦）
-安全的遠程訪問方案：
+### Using Tailscale (Recommended)
+Secure remote access solution:
 ```bash
-# 安裝 Tailscale
+# Install Tailscale
 curl -fsSL https://tailscale.com/install.sh | sh
 
-# 連接
+# Connect
 tailscale up
 ```
 
-## 📞 技術支援
+## Technical Support
 
-### 有用的命令
+### Useful Commands
 ```bash
-# 檢查系統資訊
+# Check system info
 uname -a
 docker info
 
-# 檢查磁碟空間
+# Check disk space
 df -h
 
-# 檢查記憶體
+# Check memory
 free -h
 
-# 檢查網路
+# Check network
 ip addr show
 ```
 
-### 導出配置
+### Export Configuration
 ```bash
-# 導出當前配置
+# Export current configuration
 docker-compose config > current-config.yml
 
-# 導出環境變數
+# Export environment variables
 docker inspect glyphforge-app | grep -A 10 "Env"
 ```

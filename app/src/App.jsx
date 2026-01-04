@@ -49,7 +49,7 @@ function App() {
         setPrompts(data)
       } catch (error) {
         console.error('Failed to load prompts:', error)
-        // 如果 API 失敗，嘗試從配置獲取資料夾名稱
+        // If API fails, try to get folder name from config
         try {
           const configResponse = await fetch('/api/config')
           const config = await configResponse.json()

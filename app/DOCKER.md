@@ -1,12 +1,12 @@
-# Glyphforge Docker 部署指南
+# Glyphforge Docker Deployment Guide
 
-## 快速開始
+## Quick Start
 
-### 前置需求
-- Docker Desktop (Windows/Mac) 或 Docker Engine (Linux)
+### Prerequisites
+- Docker Desktop (Windows/Mac) or Docker Engine (Linux)
 - Docker Compose
 
-### 一鍵部署
+### One-Click Deployment
 
 #### Windows (PowerShell)
 ```powershell
@@ -19,159 +19,159 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 
-## 詳細說明
+## Detailed Instructions
 
-### 檔案結構
+### File Structure
 ```
 app/
-├── Dockerfile              # Docker 映像定義
-├── docker-compose.yml      # Docker Compose 配置
-├── config.json            # 本地開發配置
-├── config.docker.json     # Docker 容器配置
-├── deploy.ps1             # Windows 部署腳本
-└── deploy.sh              # Linux/Mac 部署腳本
+├── Dockerfile              # Docker image definition
+├── docker-compose.yml      # Docker Compose configuration
+├── config.json            # Local development configuration
+├── config.docker.json     # Docker container configuration
+├── deploy.ps1             # Windows deployment script
+└── deploy.sh              # Linux/Mac deployment script
 ```
 
-### 手動部署步驟
+### Manual Deployment Steps
 
-1. **建立 Docker 映像**
+1. **Build Docker Image**
    ```bash
    docker build -t glyphforge .
    ```
 
-2. **啟動容器**
+2. **Start Container**
    ```bash
    docker-compose up -d
    ```
 
-3. **查看日誌**
+3. **View Logs**
    ```bash
    docker-compose logs -f
    ```
 
-4. **停止容器**
+4. **Stop Container**
    ```bash
    docker-compose down
    ```
 
-### Volume 配置
+### Volume Configuration
 
-容器會自動掛載主機的 prompt 資料夾：
-- 主機路徑: `D:/Glyphforge-data/prompt`
-- 容器路徑: `/data/prompt`
+The container will automatically mount the host's prompt folder:
+- Host path: `D:/Glyphforge-data/prompt`
+- Container path: `/data/prompt`
 
-如果你的資料在不同位置，請修改 `docker-compose.yml` 中的 volumes 設定：
+If your data is in a different location, modify the volumes setting in `docker-compose.yml`:
 ```yaml
 volumes:
   - /your/path/to/prompt:/data/prompt
 ```
 
-### 端口配置
+### Port Configuration
 
-- **前端**: http://localhost:5173
-- **後端 API**: http://localhost:3001
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:3001
 
-如需修改端口，請編輯 `docker-compose.yml`：
+To modify ports, edit `docker-compose.yml`:
 ```yaml
 ports:
-  - "你的端口:3001"
-  - "你的端口:5173"
+  - "your-port:3001"
+  - "your-port:5173"
 ```
 
-## 常見問題
+## FAQ
 
-### Q: 如何更新應用程式？
-A: 執行部署腳本會自動停止舊容器並建立新的：
+### Q: How to update the application?
+A: Running the deployment script will automatically stop the old container and create a new one:
 ```powershell
 .\deploy.ps1
 ```
 
-### Q: 如何查看容器狀態？
-A: 使用以下命令：
+### Q: How to check container status?
+A: Use the following command:
 ```bash
 docker ps -f name=glyphforge-app
 ```
 
-### Q: 如何進入容器內部？
-A: 使用以下命令：
+### Q: How to enter the container?
+A: Use the following command:
 ```bash
 docker exec -it glyphforge-app sh
 ```
 
-### Q: 資料夾權限問題怎麼辦？
-A: 確保 Docker 有權限訪問 `D:/Glyphforge-data/prompt`：
-- Windows: Docker Desktop 設定中允許該磁碟機
-- Linux: 確保資料夾權限正確 `chmod -R 755 /path/to/prompt`
+### Q: What about folder permission issues?
+A: Ensure Docker has permission to access `D:/Glyphforge-data/prompt`:
+- Windows: Allow the drive in Docker Desktop settings
+- Linux: Ensure folder permissions are correct `chmod -R 755 /path/to/prompt`
 
-## 開發模式 vs 生產模式
+## Development Mode vs Production Mode
 
-### 開發模式（目前配置）
-- 使用 `npm start` 同時運行前端和後端
-- 支援熱重載
-- 適合開發測試
+### Development Mode (current configuration)
+- Uses `npm start` to run both frontend and backend
+- Supports hot reload
+- Suitable for development and testing
 
-### 生產模式（可選）
-如需生產環境部署，建議：
-1. 使用 Nginx 提供靜態檔案
-2. 分離前後端容器
-3. 使用 production build
+### Production Mode (optional)
+For production deployment, it is recommended to:
+1. Use Nginx to serve static files
+2. Separate frontend and backend containers
+3. Use production build
 
-## 進階配置
+## Advanced Configuration
 
-### 使用環境變數
-在 `docker-compose.yml` 中添加環境變數：
+### Using Environment Variables
+Add environment variables in `docker-compose.yml`:
 ```yaml
 environment:
   - NODE_ENV=production
   - CUSTOM_VAR=value
 ```
 
-### 持久化日誌
-添加日誌 volume：
+### Persistent Logs
+Add log volume:
 ```yaml
 volumes:
   - D:/Glyphforge-data/prompt:/data/prompt
   - ./logs:/app/logs
 ```
 
-### 多個實例
-複製 `docker-compose.yml` 並修改：
-- 容器名稱
-- 端口映射
-- Volume 路徑
+### Multiple Instances
+Copy `docker-compose.yml` and modify:
+- Container name
+- Port mapping
+- Volume path
 
-## 安全建議
+## Security Recommendations
 
-1. 不要在公網暴露端口
-2. 使用反向代理 (Nginx/Traefik)
-3. 定期更新 Docker 映像
-4. 限制容器資源使用
+1. Don't expose ports to the public internet
+2. Use reverse proxy (Nginx/Traefik)
+3. Regularly update Docker images
+4. Limit container resource usage
 
-## 故障排除
+## Troubleshooting
 
-### 容器無法啟動
+### Container Won't Start
 ```bash
-# 查看詳細日誌
+# View detailed logs
 docker-compose logs
 
-# 檢查配置
+# Check configuration
 docker-compose config
 ```
 
-### 無法訪問資料夾
+### Cannot Access Folder
 ```bash
-# 檢查 volume 掛載
+# Check volume mount
 docker inspect glyphforge-app
 
-# 進入容器檢查
+# Enter container to check
 docker exec -it glyphforge-app ls -la /data/prompt
 ```
 
-### 端口被占用
+### Port Already in Use
 ```bash
-# 查看端口使用情況
+# Check port usage
 netstat -ano | findstr :5173
 netstat -ano | findstr :3001
 
-# 修改 docker-compose.yml 中的端口
+# Modify port in docker-compose.yml
 ```

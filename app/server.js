@@ -355,7 +355,12 @@ app.get('/api/statistics', (req, res) => {
         stats.prompts.bySensitivity[sensitive] = (stats.prompts.bySensitivity[sensitive] || 0) + 1
 
         // Top copied
-        const thumbnailPath = path.join(folderPath, '1.png')
+        // Find first available image (prefer 1.png, fallback to 0.png or any image)
+        const imageFiles = fs.readdirSync(folderPath)
+          .filter(file => /\.(png|jpg|jpeg|webp)$/i.test(file))
+          .sort()
+        const firstImage = imageFiles.length > 0 ? imageFiles[0] : null
+
         // Create unique display name using serial number and type
         const serialNumber = meta['serial-number'] !== undefined ? meta['serial-number'] : folder
         const displayName = `#${serialNumber} - ${meta.type || 'Unknown'}`
@@ -366,7 +371,7 @@ app.get('/api/statistics', (req, res) => {
           place: meta.place || 'Unknown',
           character: meta.character || 1,
           copyCount: meta.copyCount || 0,
-          thumbnail: fs.existsSync(thumbnailPath) ? `/${PROMPT_FOLDER_NAME}/${folder}/1.png` : ''
+          thumbnail: firstImage ? `/${PROMPT_FOLDER_NAME}/${folder}/${firstImage}` : ''
         })
       }
     })

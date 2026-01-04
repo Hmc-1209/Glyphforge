@@ -1,66 +1,66 @@
 # Glyphforge App
 
-一個美麗的深色主題 React 靜態網頁，整合 Prompt 圖庫管理功能
+A beautiful dark-themed React static website with integrated Prompt gallery management functionality
 
-## 特色
+## Features
 
-- 深色系設計，採用深灰藍色調
-- 微圓弧邊框設計，Tab 與內容區域融為一體
-- 響應式布局
-- 現代化的漸層效果
-- Prompt 圖庫瀏覽與複製功能
-- 彈窗圖片預覽
+- Dark design with deep gray-blue tones
+- Rounded border design with seamless integration of tabs and content area
+- Responsive layout
+- Modern gradient effects
+- Prompt gallery browsing and copy functionality
+- Image preview popup
 
-## 如何啟動
+## How to Start
 
-### 1. 安裝依賴套件
+### 1. Install Dependencies
 
-首先，在終端機中進入 `app` 資料夾：
+First, navigate to the `app` folder in your terminal:
 
 ```bash
 cd app
 ```
 
-然後安裝所需的套件：
+Then install the required packages:
 
 ```bash
 npm install
 ```
 
-### 2. 啟動應用程式
+### 2. Start the Application
 
-安裝完成後，執行以下命令同時啟動後端 API 伺服器和前端開發伺服器：
+After installation, run the following command to start both the backend API server and frontend development server:
 
 ```bash
 npm start
 ```
 
-這會同時啟動：
-- 後端 API 伺服器 (http://localhost:3001)
-- 前端開發伺服器 (http://localhost:5173)
+This will start:
+- Backend API server (http://localhost:3001)
+- Frontend development server (http://localhost:5173)
 
-### 3. 在瀏覽器中查看
+### 3. View in Browser
 
-在瀏覽器中打開 `http://localhost:5173` 即可看到你的網頁！
+Open `http://localhost:5173` in your browser to see your website!
 
-## 其他命令
+## Other Commands
 
-- `npm run dev` - 只啟動前端開發伺服器
-- `npm run server` - 只啟動後端 API 伺服器
-- `npm run build` - 建立生產環境版本
-- `npm run preview` - 預覽建立的生產版本
+- `npm run dev` - Start frontend development server only
+- `npm run server` - Start backend API server only
+- `npm run build` - Build production version
+- `npm run preview` - Preview the built production version
 
-## 功能說明
+## Features
 
 ### Prompt Tab
-- 顯示 `prompt-folder` 中所有資料夾的圖片縮圖
-- 點擊縮圖可打開彈窗查看兩張完整圖片
-- 點擊複製按鈕可複製對應資料夾中 `prompt.txt` 的內容
+- Display image thumbnails from all folders in `prompt-folder`
+- Click thumbnail to open popup and view two full images
+- Click copy button to copy the contents of `prompt.txt` from the corresponding folder
 
 ### LoRA Tab
-- LoRA 模型管理介面（示例）
+- LoRA model management interface (example)
 
-## 技術棧
+## Tech Stack
 
 - React 18
 - Vite

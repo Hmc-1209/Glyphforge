@@ -334,12 +334,12 @@ label {
   overflow: hidden;
 }
 
-/* 直放圖（portrait）- 並排顯示 */
+/* Portrait images - display side by side */
 .popup-images.portrait {
   grid-template-columns: repeat(2, 1fr);
 }
 
-/* 橫放圖（landscape）- 單張居中顯示 */
+/* Landscape images - single centered display */
 .popup-images.landscape {
   grid-template-columns: 1fr;
   max-width: 100%;
@@ -354,13 +354,13 @@ label {
   border: 1px solid rgba(99, 130, 191, 0.2);
 }
 
-/* 橫放圖的特殊樣式 */
+/* Landscape image special styles */
 .popup-images.landscape img {
   max-width: 100%;
   margin: 0 auto;
 }
 
-/* 直放圖如果有兩張，限制高度讓兩張能並排 */
+/* Portrait images - limit height when two images are side by side */
 .popup-images.portrait img {
   max-height: calc(90vh - 300px);
 }
@@ -392,7 +392,7 @@ label {
   flex-shrink: 0;
 }
 
-/* 擴散效果 */
+/* Burst effect */
 .burst-container {
   position: fixed;
   pointer-events: none;
@@ -431,7 +431,7 @@ label {
   }
 }
 
-/* 複製提示 Toast */
+/* Copy toast notification */
 .copy-toast {
   position: fixed;
   top: 2rem;
