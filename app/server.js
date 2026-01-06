@@ -196,11 +196,35 @@ app.get('/api/loras', async (req, res) => {
           displayName = modelMap[modelKey] || versionName
         }
 
+        // Find images for this specific version
+        // Format: 1(version).png, 2(version).png
+        const versionImages = []
+        const allFiles = fs.readdirSync(folderPath)
+
+        // Check for numbered images with version suffix
+        for (let i = 1; i <= 10; i++) { // Check up to 10 images
+          const imageFileName = `${i}(${versionName}).png`
+          if (allFiles.includes(imageFileName)) {
+            versionImages.push(`/${LORA_FOLDER_NAME}/character/${folder}/${imageFileName}`)
+          }
+        }
+
+        // If no version-specific images found, check for generic numbered images
+        if (versionImages.length === 0) {
+          for (let i = 1; i <= 10; i++) {
+            const imageFileName = `${i}.png`
+            if (allFiles.includes(imageFileName)) {
+              versionImages.push(`/${LORA_FOLDER_NAME}/character/${folder}/${imageFileName}`)
+            }
+          }
+        }
+
         return {
           name: versionName,
           displayName: displayName,
           fileName: file,
-          filePath: `/${LORA_FOLDER_NAME}/character/${folder}/${file}`
+          filePath: `/${LORA_FOLDER_NAME}/character/${folder}/${file}`,
+          images: versionImages
         }
       })
 

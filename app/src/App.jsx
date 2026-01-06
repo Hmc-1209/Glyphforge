@@ -118,7 +118,11 @@ function App() {
   // Initialize selected version when LoRA is selected
   useEffect(() => {
     if (selectedLora && selectedLora.versions && selectedLora.versions.length > 0) {
-      setSelectedLoraVersion(selectedLora.versions[0])
+      // Prefer illustrious version, fallback to first version
+      const illustriousVersion = selectedLora.versions.find(v =>
+        v.name.toLowerCase() === 'illustrious'
+      )
+      setSelectedLoraVersion(illustriousVersion || selectedLora.versions[0])
     } else {
       setSelectedLoraVersion(null)
     }
@@ -634,7 +638,8 @@ function App() {
                         style={{ backgroundImage: `url(${lora.thumbnail})` }}
                       ></div>
                       <div className="lora-info">
-                        <h4>{lora.name}</h4>
+                        <h4 className="lora-character">{lora.character}</h4>
+                        <p className="lora-cloth">{lora.cloth || '-'}</p>
                       </div>
                     </div>
                   ))}
@@ -765,6 +770,9 @@ function App() {
                                 borderRadius: '8px',
                                 color: '#e4e6eb'
                               }}
+                              itemStyle={{
+                                color: '#e4e6eb'
+                              }}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -795,6 +803,9 @@ function App() {
                                 backgroundColor: 'rgba(35, 40, 55, 0.98)',
                                 border: '1px solid rgba(99, 130, 191, 0.3)',
                                 borderRadius: '8px',
+                                color: '#e4e6eb'
+                              }}
+                              itemStyle={{
                                 color: '#e4e6eb'
                               }}
                             />
@@ -917,6 +928,9 @@ function App() {
                                 borderRadius: '8px',
                                 color: '#e4e6eb'
                               }}
+                              itemStyle={{
+                                color: '#e4e6eb'
+                              }}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -948,6 +962,9 @@ function App() {
                                 backgroundColor: 'rgba(35, 40, 55, 0.98)',
                                 border: '1px solid rgba(99, 130, 191, 0.3)',
                                 borderRadius: '8px',
+                                color: '#e4e6eb'
+                              }}
+                              itemStyle={{
                                 color: '#e4e6eb'
                               }}
                             />
@@ -1032,8 +1049,58 @@ function App() {
           <div className="popup-content" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={() => setSelectedLora(null)}>×</button>
 
-            <div className="popup-images landscape">
-              <img src={selectedLora.preview} alt={selectedLora.name} />
+            {selectedLora.versions && selectedLora.versions.length > 0 && (
+              <div className="lora-version-header">
+                <span className="lora-version-label">Version:</span>
+                {selectedLora.hasMultipleVersions ? (
+                  <div
+                    className="custom-version-select"
+                    onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
+                  >
+                    <div className="custom-version-select-trigger">
+                      <span>{selectedLoraVersion ? selectedLoraVersion.displayName : 'Select version'}</span>
+                      <svg className={`custom-version-arrow ${isVersionDropdownOpen ? 'open' : ''}`} width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    {isVersionDropdownOpen && (
+                      <div className="custom-version-options">
+                        {selectedLora.versions.map((version) => (
+                          <div
+                            key={version.name}
+                            className={`custom-version-option ${selectedLoraVersion && selectedLoraVersion.name === version.name ? 'selected' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedLoraVersion(version)
+                              setIsVersionDropdownOpen(false)
+                            }}
+                          >
+                            {version.displayName}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="lora-version-text">
+                    {selectedLoraVersion ? selectedLoraVersion.displayName : selectedLora.versions[0].displayName}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className={`popup-images ${
+              selectedLoraVersion && selectedLoraVersion.images && selectedLoraVersion.images.length > 1
+                ? 'portrait'
+                : 'landscape'
+            }`}>
+              {selectedLoraVersion && selectedLoraVersion.images && selectedLoraVersion.images.length > 0 ? (
+                selectedLoraVersion.images.map((image, index) => (
+                  <img key={index} src={image} alt={`${selectedLora.name} ${index + 1}`} />
+                ))
+              ) : (
+                <img src={selectedLora.preview} alt={selectedLora.name} />
+              )}
             </div>
 
             <div className="lora-meta-info">
@@ -1059,41 +1126,6 @@ function App() {
                 <div className="lora-meta-item">
                   <span className="lora-meta-label">Model:</span>
                   <span className="lora-meta-value">{selectedLora.model}</span>
-                </div>
-              )}
-              {selectedLora.hasMultipleVersions && selectedLora.versions && (
-                <div className="lora-meta-item">
-                  <span className="lora-meta-label">Version:</span>
-                  <div className="custom-version-select-wrapper">
-                    <div
-                      className="custom-version-select"
-                      onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
-                    >
-                      <div className="custom-version-select-trigger">
-                        <span>{selectedLoraVersion ? selectedLoraVersion.displayName : 'Select version'}</span>
-                        <svg className={`custom-version-arrow ${isVersionDropdownOpen ? 'open' : ''}`} width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      {isVersionDropdownOpen && (
-                        <div className="custom-version-options">
-                          {selectedLora.versions.map((version) => (
-                            <div
-                              key={version.name}
-                              className={`custom-version-option ${selectedLoraVersion && selectedLoraVersion.name === version.name ? 'selected' : ''}`}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedLoraVersion(version)
-                                setIsVersionDropdownOpen(false)
-                              }}
-                            >
-                              {version.displayName}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </div>
               )}
             </div>

@@ -228,6 +228,23 @@ label {
   color: #9ca3b4;
 }
 
+.lora-character {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #8ba4d0;
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+}
+
+.lora-cloth {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: #9ca3b4;
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: 1.2;
+}
+
 .prompt-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -519,6 +536,16 @@ label {
 
   .filter-count {
     font-size: 0.85rem;
+  }
+
+  .lora-version-header {
+    flex-wrap: wrap;
+  }
+
+  .lora-version-header .custom-version-select {
+    min-width: 150px;
+    max-width: 100%;
+    flex: 1 1 auto;
   }
 }
 
@@ -859,6 +886,9 @@ label {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: visible;
 }
 
 .lora-meta-label {
@@ -878,6 +908,8 @@ label {
 .custom-version-select-wrapper {
   position: relative;
   min-width: 160px;
+  flex: 1 1 auto;
+  max-width: 100%;
 }
 
 .custom-version-select {
@@ -902,6 +934,13 @@ label {
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(99, 130, 191, 0.1);
+  white-space: nowrap;
+}
+
+.custom-version-select-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .custom-version-select-trigger:hover {
@@ -981,6 +1020,41 @@ label {
   right: 1rem;
   color: #6382bf;
   font-weight: bold;
+}
+
+/* LoRA Version Header */
+.lora-version-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+
+.lora-version-label {
+  color: #8ba4d0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lora-version-header .custom-version-select {
+  flex: 0 1 auto;
+  min-width: 180px;
+  max-width: 250px;
+}
+
+.lora-version-text {
+  color: #e4e6eb;
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(145deg, rgba(31, 35, 50, 0.6) 0%, rgba(42, 47, 62, 0.6) 100%);
+  border: 1px solid rgba(99, 130, 191, 0.25);
+  border-radius: 8px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(99, 130, 191, 0.1);
 }
 
 /* LoRA Actions */
