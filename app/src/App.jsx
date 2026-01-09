@@ -861,9 +861,34 @@ function App() {
                           <XAxis
                             dataKey="name"
                             stroke="#8ba4d0"
-                            tick={{ fill: '#8ba4d0' }}
-                            angle={-45}
-                            textAnchor="end"
+                            tick={(props) => {
+                              const { x, y, payload } = props
+                              if (!payload || !payload.value) return null
+
+                              // Split at first '-' to separate character and cloth
+                              const dashIndex = payload.value.indexOf('-')
+                              let line1 = payload.value
+                              let line2 = ''
+
+                              if (dashIndex !== -1) {
+                                line1 = payload.value.substring(0, dashIndex)
+                                line2 = payload.value.substring(dashIndex + 1)
+                              }
+
+                              return (
+                                <g transform={`translate(${x},${y})`}>
+                                  <text
+                                    x={0}
+                                    y={0}
+                                    textAnchor="middle"
+                                    fontSize={12}
+                                  >
+                                    <tspan x={0} dy={16} fill="#8ba4d0">{line1}</tspan>
+                                    {line2 && <tspan x={0} dy={14} fill="#6b7a99">{line2}</tspan>}
+                                  </text>
+                                </g>
+                              )
+                            }}
                             height={100}
                           />
                           <YAxis

@@ -434,9 +434,15 @@ app.get('/api/statistics', (req, res) => {
         const downloadCount = meta.downloadCount || 0
         stats.loras.totalDownloads += downloadCount
         const loraThumbnailPath = path.join(loraCharacterPath, folder, '0.png')
+
+        // Generate display name: character-cloth (same logic as main LoRA list)
+        const loraDisplayName = meta.cloth && meta.cloth.trim() !== ''
+          ? `${meta.character}-${meta.cloth}`
+          : meta.character
+
         stats.loras.topDownloaded.push({
           id: folder,
-          name: meta.character || folder,
+          name: loraDisplayName || folder,
           downloadCount: downloadCount,
           thumbnail: fs.existsSync(loraThumbnailPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/0.png` : ''
         })
