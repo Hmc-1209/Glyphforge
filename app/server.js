@@ -247,6 +247,7 @@ app.get('/api/loras', async (req, res) => {
         // Include all meta fields
         character: meta.character || folder,
         cloth: meta.cloth || '',
+        company: meta.company || '',
         gender: meta.gender || '',
         model: modelInfo,
         copyCount: meta.copyCount || 0,

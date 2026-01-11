@@ -26,6 +26,7 @@ function App() {
   // LoRA filters
   const [loraGenderFilter, setLoraGenderFilter] = useState('all')
   const [loraModelFilter, setLoraModelFilter] = useState('all')
+  const [loraCompanyFilter, setLoraCompanyFilter] = useState('all')
   const [loraCharacterFilter, setLoraCharacterFilter] = useState('all')
   const [isLoraFilterExpanded, setIsLoraFilterExpanded] = useState(false)
 
@@ -383,9 +384,10 @@ function App() {
     const filtered = loras.filter(l => {
       const genderMatch = loraGenderFilter === 'all' || l.gender === loraGenderFilter
       const modelMatch = loraModelFilter === 'all' || l.model === loraModelFilter
+      const companyMatch = loraCompanyFilter === 'all' || l.company === loraCompanyFilter
       const characterMatch = loraCharacterFilter === 'all' || l.character === loraCharacterFilter
 
-      return genderMatch && modelMatch && characterMatch
+      return genderMatch && modelMatch && companyMatch && characterMatch
     })
 
     // Sort based on loraSortBy
@@ -597,6 +599,16 @@ function App() {
                         loraModelFilter,
                         setLoraModelFilter,
                         getLoraUniqueValues('model'),
+                        (val) => val === 'all' ? `All (${loras.length})` : val
+                      )}
+
+                      {/* Company Filter */}
+                      {renderLoraFilter(
+                        'Company',
+                        'company',
+                        loraCompanyFilter,
+                        setLoraCompanyFilter,
+                        getLoraUniqueValues('company'),
                         (val) => val === 'all' ? `All (${loras.length})` : val
                       )}
 
@@ -900,6 +912,17 @@ function App() {
                             content={({ active, payload }) => {
                               if (active && payload && payload.length) {
                                 const data = payload[0].payload
+
+                                // Split character and cloth
+                                const dashIndex = data.name.indexOf('-')
+                                let character = data.name
+                                let cloth = ''
+
+                                if (dashIndex !== -1) {
+                                  character = data.name.substring(0, dashIndex)
+                                  cloth = data.name.substring(dashIndex + 1)
+                                }
+
                                 return (
                                   <div className="custom-chart-tooltip">
                                     {data.thumbnail && (
@@ -910,7 +933,8 @@ function App() {
                                       />
                                     )}
                                     <div className="tooltip-info">
-                                      <p className="tooltip-label">{data.name}</p>
+                                      <p className="tooltip-label">{character}</p>
+                                      {cloth && <p className="tooltip-cloth">{cloth}</p>}
                                       <p className="tooltip-value">Downloads: {data.downloadCount}</p>
                                     </div>
                                   </div>
@@ -1076,40 +1100,47 @@ function App() {
 
             {selectedLora.versions && selectedLora.versions.length > 0 && (
               <div className="lora-version-header">
-                <span className="lora-version-label">Version:</span>
-                {selectedLora.hasMultipleVersions ? (
-                  <div
-                    className="custom-version-select"
-                    onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
-                  >
-                    <div className="custom-version-select-trigger">
-                      <span>{selectedLoraVersion ? selectedLoraVersion.displayName : 'Select version'}</span>
-                      <svg className={`custom-version-arrow ${isVersionDropdownOpen ? 'open' : ''}`} width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    {isVersionDropdownOpen && (
-                      <div className="custom-version-options">
-                        {selectedLora.versions.map((version) => (
-                          <div
-                            key={version.name}
-                            className={`custom-version-option ${selectedLoraVersion && selectedLoraVersion.name === version.name ? 'selected' : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSelectedLoraVersion(version)
-                              setIsVersionDropdownOpen(false)
-                            }}
-                          >
-                            {version.displayName}
-                          </div>
-                        ))}
+                <div className="lora-version-left">
+                  <span className="lora-version-label">Version:</span>
+                  {selectedLora.hasMultipleVersions ? (
+                    <div
+                      className="custom-version-select"
+                      onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
+                    >
+                      <div className="custom-version-select-trigger">
+                        <span>{selectedLoraVersion ? selectedLoraVersion.displayName : 'Select version'}</span>
+                        <svg className={`custom-version-arrow ${isVersionDropdownOpen ? 'open' : ''}`} width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
                       </div>
-                    )}
+                      {isVersionDropdownOpen && (
+                        <div className="custom-version-options">
+                          {selectedLora.versions.map((version) => (
+                            <div
+                              key={version.name}
+                              className={`custom-version-option ${selectedLoraVersion && selectedLoraVersion.name === version.name ? 'selected' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedLoraVersion(version)
+                                setIsVersionDropdownOpen(false)
+                              }}
+                            >
+                              {version.displayName}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="lora-version-text">
+                      {selectedLoraVersion ? selectedLoraVersion.displayName : selectedLora.versions[0].displayName}
+                    </span>
+                  )}
+                </div>
+                {selectedLora.company && (
+                  <div className="lora-company-info">
+                    <span className="company-label">From</span> <span className="company-name">{selectedLora.company}</span>
                   </div>
-                ) : (
-                  <span className="lora-version-text">
-                    {selectedLoraVersion ? selectedLoraVersion.displayName : selectedLora.versions[0].displayName}
-                  </span>
                 )}
               </div>
             )}

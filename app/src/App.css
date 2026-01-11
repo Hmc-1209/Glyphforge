@@ -539,7 +539,16 @@ label {
   }
 
   .lora-version-header {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .lora-company-info {
+    position: static;
+    transform: none;
+    align-self: center;
+    margin-top: 0.5rem;
   }
 
   .lora-version-header .custom-version-select {
@@ -1026,9 +1035,17 @@ label {
 .lora-version-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   margin-bottom: 1.5rem;
   position: relative;
+  min-height: 40px;
+}
+
+.lora-version-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  position: relative;
+  z-index: 1;
 }
 
 .lora-version-label {
@@ -1055,6 +1072,30 @@ label {
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(99, 130, 191, 0.1);
+}
+
+/* LoRA Company Info */
+.lora-company-info {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #9ca3b4;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.company-label {
+  color: #9ca3b4;
+  font-weight: 400;
+}
+
+.company-name {
+  font-weight: 700;
+  color: #8ba4d0;
 }
 
 /* LoRA Actions */
@@ -1467,6 +1508,13 @@ label {
   color: #e4e6eb;
   font-size: 1rem;
   font-weight: 600;
+  margin: 0 0 0.25rem 0;
+}
+
+.tooltip-cloth {
+  color: #7a8399;
+  font-size: 0.85rem;
+  font-weight: 400;
   margin: 0 0 0.5rem 0;
 }
 
