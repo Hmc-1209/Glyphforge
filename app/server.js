@@ -248,6 +248,7 @@ app.get('/api/loras', async (req, res) => {
         character: meta.character || folder,
         cloth: meta.cloth || '',
         company: meta.company || '',
+        group: meta.group || '',
         gender: meta.gender || '',
         model: modelInfo,
         copyCount: meta.copyCount || 0,

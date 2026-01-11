@@ -544,7 +544,7 @@ label {
     gap: 0.75rem;
   }
 
-  .lora-company-info {
+  .lora-company-group-container {
     position: static;
     transform: none;
     align-self: center;
@@ -1074,28 +1074,45 @@ label {
     inset 0 1px 0 rgba(99, 130, 191, 0.1);
 }
 
-/* LoRA Company Info */
-.lora-company-info {
+/* LoRA Company and Group Container */
+.lora-company-group-container {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #9ca3b4;
-  font-size: 0.95rem;
-  white-space: nowrap;
   pointer-events: none;
 }
 
-.company-label {
+/* Company Line */
+.lora-company-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  position: relative;
+}
+
+.company-from-label {
   color: #9ca3b4;
+  font-size: 0.95rem;
   font-weight: 400;
 }
 
-.company-name {
-  font-weight: 700;
+.lora-company-name {
   color: #8ba4d0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+/* Group Line */
+.lora-group-line {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 0.15rem;
+  color: #8ba4d0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* LoRA Actions */

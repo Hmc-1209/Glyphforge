@@ -27,6 +27,7 @@ function App() {
   const [loraGenderFilter, setLoraGenderFilter] = useState('all')
   const [loraModelFilter, setLoraModelFilter] = useState('all')
   const [loraCompanyFilter, setLoraCompanyFilter] = useState('all')
+  const [loraGroupFilter, setLoraGroupFilter] = useState('all')
   const [loraCharacterFilter, setLoraCharacterFilter] = useState('all')
   const [isLoraFilterExpanded, setIsLoraFilterExpanded] = useState(false)
 
@@ -385,9 +386,10 @@ function App() {
       const genderMatch = loraGenderFilter === 'all' || l.gender === loraGenderFilter
       const modelMatch = loraModelFilter === 'all' || l.model === loraModelFilter
       const companyMatch = loraCompanyFilter === 'all' || l.company === loraCompanyFilter
+      const groupMatch = loraGroupFilter === 'all' || l.group === loraGroupFilter
       const characterMatch = loraCharacterFilter === 'all' || l.character === loraCharacterFilter
 
-      return genderMatch && modelMatch && companyMatch && characterMatch
+      return genderMatch && modelMatch && companyMatch && groupMatch && characterMatch
     })
 
     // Sort based on loraSortBy
@@ -609,6 +611,16 @@ function App() {
                         loraCompanyFilter,
                         setLoraCompanyFilter,
                         getLoraUniqueValues('company'),
+                        (val) => val === 'all' ? `All (${loras.length})` : val
+                      )}
+
+                      {/* Group Filter */}
+                      {renderLoraFilter(
+                        'Group',
+                        'group',
+                        loraGroupFilter,
+                        setLoraGroupFilter,
+                        getLoraUniqueValues('group'),
                         (val) => val === 'all' ? `All (${loras.length})` : val
                       )}
 
@@ -1137,11 +1149,19 @@ function App() {
                     </span>
                   )}
                 </div>
-                {selectedLora.company && (
-                  <div className="lora-company-info">
-                    <span className="company-label">From</span> <span className="company-name">{selectedLora.company}</span>
-                  </div>
-                )}
+                <div className="lora-company-group-container">
+                  {selectedLora.company && (
+                    <div className="lora-company-line">
+                      <span className="company-from-label">From:</span>
+                      <span className="lora-company-name">{selectedLora.company}</span>
+                    </div>
+                  )}
+                  {selectedLora.group && selectedLora.group !== 'N/A' && (
+                    <div className="lora-group-line">
+                      {selectedLora.group}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
