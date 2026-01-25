@@ -6,5 +6,9 @@
   "loraFolder": {
     "path": "/datas/LoRA",
     "name": "LoRA"
+  },
+  "galleryFolder": {
+    "path": "/datas/gallery",
+    "name": "gallery"
   }
 }
