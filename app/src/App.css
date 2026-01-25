@@ -1,3 +1,40 @@
+/* =============================================== */
+/* GLOBAL CUSTOM SCROLLBAR STYLES */
+/* =============================================== */
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(31, 35, 50, 0.5);
+  border-radius: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(145deg, rgba(99, 130, 191, 0.6), rgba(99, 130, 191, 0.4));
+  border-radius: 10px;
+  border: 2px solid rgba(31, 35, 50, 0.5);
+  transition: all 0.3s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(145deg, rgba(99, 130, 191, 0.8), rgba(99, 130, 191, 0.6));
+  border-color: rgba(99, 130, 191, 0.3);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 130, 191, 0.5) rgba(31, 35, 50, 0.5);
+}
+
+/* =============================================== */
+/* APP CONTAINER */
+/* =============================================== */
+
 .app-container {
   min-height: 100vh;
   padding: 8px;
@@ -497,8 +534,14 @@ label {
     font-size: 1.5rem;
   }
 
-  .lora-grid, .prompt-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  .lora-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 1rem;
+  }
+
+  .prompt-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
   }
 
   .popup-content {
@@ -539,22 +582,51 @@ label {
   }
 
   .lora-version-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 1rem !important;
+    min-height: auto !important;
+  }
+
+  .lora-version-left {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    z-index: auto !important;
   }
 
   .lora-company-group-container {
-    position: static;
-    transform: none;
-    align-self: center;
-    margin-top: 0.5rem;
+    position: static !important;
+    transform: none !important;
+    left: auto !important;
+    align-self: stretch !important;
+    margin-top: 0 !important;
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    pointer-events: auto !important;
+  }
+
+  .lora-company-line {
+    justify-content: center !important;
+    width: 100% !important;
+    position: static !important;
+  }
+
+  .lora-group-line {
+    position: static !important;
+    transform: none !important;
+    left: auto !important;
+    top: auto !important;
+    margin-top: 0 !important;
+    text-align: center !important;
+    width: 100% !important;
   }
 
   .lora-version-header .custom-version-select {
-    min-width: 150px;
-    max-width: 100%;
-    flex: 1 1 auto;
+    min-width: 150px !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
   }
 }
 
@@ -1569,6 +1641,70 @@ label {
 /* Hover background for chart items */
 .recharts-bar rect:hover {
   filter: brightness(1.15);
+}
+
+/* Scroll to Top Button */
+.scroll-to-top {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #6382bf 0%, #5a7bb3 100%);
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 4px 12px rgba(99, 130, 191, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  z-index: 999;
+  animation: fadeInUp 0.3s ease;
+}
+
+.scroll-to-top:hover {
+  background: linear-gradient(145deg, #7a92cf 0%, #6a8bc3 100%);
+  transform: translateY(-4px);
+  box-shadow:
+    0 8px 20px rgba(99, 130, 191, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.scroll-to-top:active {
+  transform: translateY(-2px);
+}
+
+.scroll-to-top svg {
+  flex-shrink: 0;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .scroll-to-top {
+    bottom: 1.5rem;
+    right: 1.5rem;
+    width: 48px;
+    height: 48px;
+  }
+
+  .scroll-to-top svg {
+    width: 20px;
+    height: 20px;
+  }
 }
 
 /* Responsive adjustments */

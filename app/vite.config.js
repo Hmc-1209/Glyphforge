@@ -33,6 +33,10 @@ export default defineConfig({
       [`/${config.loraFolder.name}`]: {
         target: 'http://localhost:3001',
         changeOrigin: true,
+      },
+      [`/${config.galleryFolder.name}`]: {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
       }
     },
     hmr: {

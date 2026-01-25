@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import './App.css'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import Gallery from './components/Gallery/Gallery'
+import { useDataCache } from './hooks/useDataCache'
+import { ToastProvider } from './components/Toast/ToastContext'
 
 function App() {
-  const [activeTab, setActiveTab] = useState('prompt')
-  const [prompts, setPrompts] = useState([])
+  const [activeTab, setActiveTab] = useState(() => {
+    // Load from localStorage, default to 'lora' for new users
+    return localStorage.getItem('activeTab') || 'lora'
+  })
   const [selectedPrompt, setSelectedPrompt] = useState(null)
-  const [loras, setLoras] = useState([])
   const [selectedLora, setSelectedLora] = useState(null)
   const [selectedLoraVersion, setSelectedLoraVersion] = useState(null)
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false)
@@ -38,50 +42,54 @@ function App() {
   // Help modal
   const [showHelpModal, setShowHelpModal] = useState(false)
 
+  // Scroll to top button visibility
+  const [showScrollTop, setShowScrollTop] = useState(false)
+
+  // Use data cache for prompts and loras
+  const promptsCache = useDataCache('prompts', async () => {
+    try {
+      const response = await fetch('/api/prompts')
+      return await response.json()
+    } catch (error) {
+      console.error('Failed to load prompts:', error)
+      // Fallback
+      try {
+        const configResponse = await fetch('/api/config')
+        const config = await configResponse.json()
+        const folderName = config.promptFolder.name
+        return [
+          { id: '0', thumbnail: `/${folderName}/0/1.png`, images: [`/${folderName}/0/1.png`, `/${folderName}/0/2.png`], prompt: '', imageOrientation: 'portrait' },
+          { id: '1', thumbnail: `/${folderName}/1/1.png`, images: [`/${folderName}/1/1.png`, `/${folderName}/1/2.png`], prompt: '', imageOrientation: 'portrait' }
+        ]
+      } catch (configError) {
+        console.error('Failed to load config:', configError)
+        return []
+      }
+    }
+  })
+
+  const lorasCache = useDataCache('loras', async () => {
+    try {
+      const response = await fetch('/api/loras')
+      return await response.json()
+    } catch (error) {
+      console.error('Failed to load LoRAs:', error)
+      return []
+    }
+  })
+
+  const prompts = promptsCache.data || []
+  const loras = lorasCache.data || []
+
   // Save sensitivity filter to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('sensitivityFilter', sensitivityFilter)
   }, [sensitivityFilter])
 
+  // Save active tab to localStorage whenever it changes
   useEffect(() => {
-    const loadPrompts = async () => {
-      try {
-        const response = await fetch('/api/prompts')
-        const data = await response.json()
-        setPrompts(data)
-      } catch (error) {
-        console.error('Failed to load prompts:', error)
-        // If API fails, try to get folder name from config
-        try {
-          const configResponse = await fetch('/api/config')
-          const config = await configResponse.json()
-          const folderName = config.promptFolder.name
-          setPrompts([
-            { id: '0', thumbnail: `/${folderName}/0/1.png`, images: [`/${folderName}/0/1.png`, `/${folderName}/0/2.png`], prompt: '', imageOrientation: 'portrait' },
-            { id: '1', thumbnail: `/${folderName}/1/1.png`, images: [`/${folderName}/1/1.png`, `/${folderName}/1/2.png`], prompt: '', imageOrientation: 'portrait' }
-          ])
-        } catch (configError) {
-          console.error('Failed to load config:', configError)
-          setPrompts([])
-        }
-      }
-    }
-    loadPrompts()
-  }, [])
-
-  useEffect(() => {
-    const loadLoras = async () => {
-      try {
-        const response = await fetch('/api/loras')
-        const data = await response.json()
-        setLoras(data)
-      } catch (error) {
-        console.error('Failed to load LoRAs:', error)
-        setLoras([])
-      }
-    }
-    loadLoras()
-  }, [])
+    localStorage.setItem('activeTab', activeTab)
+  }, [activeTab])
 
   useEffect(() => {
     const loadStatistics = async () => {
@@ -116,6 +124,21 @@ function App() {
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
   }, [selectedPrompt, selectedLora])
+
+  // Handle scroll to show/hide scroll-to-top button
+  useEffect(() => {
+    const handleScroll = () => {
+      // Show button when scrolled down more than 300px
+      if (window.scrollY > 300) {
+        setShowScrollTop(true)
+      } else {
+        setShowScrollTop(false)
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // Initialize selected version when LoRA is selected
   useEffect(() => {
@@ -186,6 +209,13 @@ function App() {
 
   const closePopup = () => {
     setSelectedPrompt(null)
+  }
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
   }
 
   // Render a custom dropdown filter for prompts
@@ -404,7 +434,8 @@ function App() {
   const filteredLoras = filteredAndSortedLoras
 
   return (
-    <div className="app-container">
+    <ToastProvider>
+      <div className="app-container">
       {/* Floating Sensitivity Toggle */}
       <div className="sensitivity-toggle-container">
         <div className="sensitivity-toggle">
@@ -427,16 +458,22 @@ function App() {
       <div className="main-card">
         <div className="tab-container">
           <button
+            className={`tab ${activeTab === 'lora' ? 'active' : ''}`}
+            onClick={() => setActiveTab('lora')}
+          >
+            LoRA
+          </button>
+          <button
             className={`tab ${activeTab === 'prompt' ? 'active' : ''}`}
             onClick={() => setActiveTab('prompt')}
           >
             Prompt
           </button>
           <button
-            className={`tab ${activeTab === 'lora' ? 'active' : ''}`}
-            onClick={() => setActiveTab('lora')}
+            className={`tab ${activeTab === 'gallery' ? 'active' : ''}`}
+            onClick={() => setActiveTab('gallery')}
           >
-            LoRA
+            Gallery
           </button>
           <button
             className={`tab ${activeTab === 'statistics' ? 'active' : ''}`}
@@ -669,6 +706,12 @@ function App() {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'gallery' && (
+            <div className="tab-content">
+              <Gallery sensitivityFilter={sensitivityFilter} />
             </div>
           )}
 
@@ -1309,7 +1352,17 @@ function App() {
           </div>
         </div>
       )}
-    </div>
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <button className="scroll-to-top" onClick={scrollToTop} title="Back to top">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+          </svg>
+        </button>
+      )}
+      </div>
+    </ToastProvider>
   )
 }
 

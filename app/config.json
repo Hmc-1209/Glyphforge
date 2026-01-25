@@ -6,5 +6,9 @@
   "loraFolder": {
     "path": "D:\\Glyphforge-data\\LoRA\\",
     "name": "LoRA"
+  },
+  "galleryFolder": {
+    "path": "D:\\Glyphforge-data\\gallery\\",
+    "name": "gallery"
   }
 }
