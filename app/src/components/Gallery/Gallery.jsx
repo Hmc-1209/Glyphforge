@@ -29,7 +29,10 @@ function Gallery({ sensitivityFilter }) {
       const response = await fetch('/api/gallery/static')
       return await response.json()
     },
-    { autoLoad: false } // Don't auto-load, load on demand
+    {
+      autoLoad: false, // Don't auto-load, load on demand
+      revalidateOnMount: true // Check for updates in background on mount
+    }
   )
 
   const videoCache = useDataCache(
@@ -38,7 +41,10 @@ function Gallery({ sensitivityFilter }) {
       const response = await fetch('/api/gallery/video')
       return await response.json()
     },
-    { autoLoad: false }
+    {
+      autoLoad: false,
+      revalidateOnMount: true
+    }
   )
 
   const storyCache = useDataCache(
@@ -47,7 +53,10 @@ function Gallery({ sensitivityFilter }) {
       const response = await fetch('/api/gallery/story')
       return await response.json()
     },
-    { autoLoad: false }
+    {
+      autoLoad: false,
+      revalidateOnMount: true
+    }
   )
 
   // Save gallery category to localStorage whenever it changes
@@ -72,12 +81,25 @@ function Gallery({ sensitivityFilter }) {
 
   // Load albums when category changes (only if not already loaded)
   useEffect(() => {
-    if (activeCategory === 'static' && !staticCache.data) {
-      staticCache.loadData()
-    } else if (activeCategory === 'video' && !videoCache.data) {
-      videoCache.loadData()
-    } else if (activeCategory === 'story' && !storyCache.data) {
-      storyCache.loadData() // Load data even if disabled (for admin purposes)
+    if (activeCategory === 'static') {
+      if (!staticCache.data) {
+        staticCache.loadData()
+      } else {
+        // Already have cached data, revalidate in background
+        staticCache.revalidate()
+      }
+    } else if (activeCategory === 'video') {
+      if (!videoCache.data) {
+        videoCache.loadData()
+      } else {
+        videoCache.revalidate()
+      }
+    } else if (activeCategory === 'story') {
+      if (!storyCache.data) {
+        storyCache.loadData() // Load data even if disabled (for admin purposes)
+      } else {
+        storyCache.revalidate()
+      }
     }
   }, [activeCategory]) // Only depend on activeCategory to avoid infinite loop
 

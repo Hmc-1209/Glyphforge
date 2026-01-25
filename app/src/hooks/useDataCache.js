@@ -9,13 +9,15 @@ import { useState, useEffect, useRef, useCallback } from 'react'
  * @param {boolean} options.autoLoad - Whether to load data automatically on mount (default: true)
  * @param {number} options.staleTime - Time in ms before checking for updates (default: 30000 = 30s)
  * @param {boolean} options.persist - Whether to persist cache to localStorage (default: true)
- * @returns {Object} - { data, loading, error, refresh, isStale }
+ * @param {boolean} options.revalidateOnMount - Whether to check for updates on mount while showing cached data (default: false)
+ * @returns {Object} - { data, loading, error, refresh, isStale, revalidate }
  */
 export function useDataCache(cacheKey, fetchFn, options = {}) {
   const {
     autoLoad = true,
     staleTime = 30000, // 30 seconds default
-    persist = true     // Enable persistence by default
+    persist = true,     // Enable persistence by default
+    revalidateOnMount = false // Enable stale-while-revalidate on mount
   } = options
 
   const STORAGE_KEY = `cache_${cacheKey}`
@@ -205,12 +207,45 @@ export function useDataCache(cacheKey, fetchFn, options = {}) {
     }
   }, [checkForUpdates, loadData])
 
+  // Revalidate function (stale-while-revalidate strategy)
+  // Shows cached data immediately, then silently checks and updates in background
+  const revalidate = useCallback(async () => {
+    try {
+      // First, check if there are any updates
+      const needsUpdate = await checkForUpdates()
+
+      if (needsUpdate) {
+        // Data has changed on server, silently reload it
+        await loadData(true, true) // force=true, silent=true
+        console.log(`🔄 [${cacheKey}] Background revalidation: Updated`)
+      } else {
+        // No changes, just clear the stale flag
+        setIsStale(false)
+        console.log(`✓ [${cacheKey}] Background revalidation: Up to date`)
+      }
+    } catch (err) {
+      console.error(`Failed to revalidate ${cacheKey}:`, err)
+    }
+  }, [checkForUpdates, loadData, cacheKey])
+
   // Auto-load on mount if enabled
   useEffect(() => {
     if (autoLoad) {
-      loadData()
+      // If we have cached data and revalidateOnMount is enabled,
+      // show cached data immediately and revalidate in background
+      const hasCachedData = data !== null
+
+      if (hasCachedData && revalidateOnMount) {
+        console.log(`📦 [${cacheKey}] Using cached data, revalidating in background...`)
+        // Don't call loadData, we already have cached data
+        // Just trigger background revalidation
+        revalidate()
+      } else {
+        // Normal load
+        loadData()
+      }
     }
-  }, [autoLoad, loadData])
+  }, []) // Only run on mount, don't include dependencies to avoid re-triggering
 
   // Periodic staleness check
   useEffect(() => {
@@ -234,6 +269,7 @@ export function useDataCache(cacheKey, fetchFn, options = {}) {
     error,
     refresh,
     isStale,
-    loadData
+    loadData,
+    revalidate
   }
 }
