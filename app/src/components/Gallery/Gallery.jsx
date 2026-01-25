@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import AlbumGrid from './AlbumGrid'
 import StaticViewer from './Viewers/StaticViewer'
-import GifViewer from './Viewers/GifViewer'
+import VideoViewer from './Viewers/VideoViewer'
 import StoryViewer from './Viewers/StoryViewer'
 import AdminLogin from './Admin/AdminLogin'
 import AdminPanel from './Admin/AdminPanel'
@@ -12,7 +12,10 @@ import './Gallery.css'
 const ENABLE_STORY_GALLERY = false
 
 function Gallery({ sensitivityFilter }) {
-  const [activeCategory, setActiveCategory] = useState('static')
+  const [activeCategory, setActiveCategory] = useState(() => {
+    // Load from localStorage, default to 'static' for new users
+    return localStorage.getItem('galleryCategory') || 'static'
+  })
   const [selectedAlbum, setSelectedAlbum] = useState(null)
   const [selectedType, setSelectedType] = useState(null)
   const [adminMode, setAdminMode] = useState(false)
@@ -46,6 +49,11 @@ function Gallery({ sensitivityFilter }) {
     },
     { autoLoad: false }
   )
+
+  // Save gallery category to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('galleryCategory', activeCategory)
+  }, [activeCategory])
 
   // Check if admin is logged in
   useEffect(() => {
@@ -169,8 +177,8 @@ function Gallery({ sensitivityFilter }) {
     <div className="gallery-container">
       <div className="gallery-header">
         <div>
-          <h2>Gallery</h2>
-          <p>Browse image collections, GIF albums, and visual stories</p>
+          <h2>Collection Gallery</h2>
+          <p>Browse image collections, video albums, and visual stories</p>
         </div>
         <button
           className={`admin-toggle-btn ${adminMode ? 'active' : ''}`}
@@ -238,7 +246,7 @@ function Gallery({ sensitivityFilter }) {
             <StaticViewer album={selectedAlbum} onClose={handleCloseViewer} />
           )}
           {selectedAlbum && selectedType === 'gif' && (
-            <GifViewer album={selectedAlbum} onClose={handleCloseViewer} />
+            <VideoViewer album={selectedAlbum} onClose={handleCloseViewer} />
           )}
           {selectedAlbum && selectedType === 'story' && ENABLE_STORY_GALLERY && (
             <StoryViewer album={selectedAlbum} onClose={handleCloseViewer} />

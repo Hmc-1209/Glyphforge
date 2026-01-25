@@ -129,6 +129,44 @@ function StaticViewer({ album, onClose }) {
     container.scrollLeft += e.deltaY
   }
 
+  // Check if album has no images
+  if (!album.images || album.images.length === 0) {
+    return (
+      <div className="gallery-viewer-overlay" onClick={onClose}>
+        <div className="gallery-viewer-content" onClick={(e) => e.stopPropagation()}>
+          <button className="gallery-viewer-close" onClick={onClose}>×</button>
+
+          {/* Header */}
+          <div className="gallery-viewer-header">
+            <h2>{album.title}</h2>
+            {album.description && <p>{album.description}</p>}
+          </div>
+
+          {/* Empty State */}
+          <div className="gallery-viewer-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center', color: '#9ca3af' }}>
+              <p>No images available</p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="gallery-viewer-footer">
+            {album.tags && album.tags.length > 0 && (
+              <div className="gallery-viewer-tags">
+                {album.tags.map((tag, idx) => (
+                  <span key={idx} className="gallery-tag">{tag}</span>
+                ))}
+              </div>
+            )}
+            {album.author && (
+              <div className="gallery-viewer-author">by {album.author}</div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="gallery-viewer-overlay" onClick={onClose}>
       <div className="gallery-viewer-content" onClick={(e) => e.stopPropagation()}>

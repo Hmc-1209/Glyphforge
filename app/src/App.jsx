@@ -473,7 +473,7 @@ function App() {
             className={`tab ${activeTab === 'gallery' ? 'active' : ''}`}
             onClick={() => setActiveTab('gallery')}
           >
-            Gallery
+            Collection
           </button>
           <button
             className={`tab ${activeTab === 'statistics' ? 'active' : ''}`}
