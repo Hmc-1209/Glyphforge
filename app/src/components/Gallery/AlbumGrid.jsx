@@ -56,7 +56,9 @@ function AlbumGrid({ albums, onAlbumClick, type }) {
                     )}
                   </>
                 ) : (
-                  <span className="meta-item">{album.imageCount} images</span>
+                  <span className="meta-item">
+                    {album.imageCount} {type === 'video' ? 'videos' : 'images'}
+                  </span>
                 )}
                 {album.viewCount > 0 && (
                   <span className="meta-item">{album.viewCount} views</span>
