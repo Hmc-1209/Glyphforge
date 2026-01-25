@@ -32,10 +32,10 @@ function Gallery({ sensitivityFilter }) {
     { autoLoad: false } // Don't auto-load, load on demand
   )
 
-  const gifCache = useDataCache(
-    'gallery.gif',
+  const videoCache = useDataCache(
+    'gallery.video',
     async () => {
-      const response = await fetch('/api/gallery/gif')
+      const response = await fetch('/api/gallery/video')
       return await response.json()
     },
     { autoLoad: false }
@@ -74,8 +74,8 @@ function Gallery({ sensitivityFilter }) {
   useEffect(() => {
     if (activeCategory === 'static' && !staticCache.data) {
       staticCache.loadData()
-    } else if (activeCategory === 'gif' && !gifCache.data) {
-      gifCache.loadData()
+    } else if (activeCategory === 'video' && !videoCache.data) {
+      videoCache.loadData()
     } else if (activeCategory === 'story' && !storyCache.data) {
       storyCache.loadData() // Load data even if disabled (for admin purposes)
     }
@@ -96,7 +96,7 @@ function Gallery({ sensitivityFilter }) {
   const getCurrentAlbums = () => {
     let albums = []
     if (activeCategory === 'static') albums = staticCache.data || []
-    else if (activeCategory === 'gif') albums = gifCache.data || []
+    else if (activeCategory === 'video') albums = videoCache.data || []
     else if (activeCategory === 'story') albums = storyCache.data || []
 
     return filterBySensitivity(albums)
@@ -104,7 +104,7 @@ function Gallery({ sensitivityFilter }) {
 
   const getCurrentCache = () => {
     if (activeCategory === 'static') return staticCache
-    if (activeCategory === 'gif') return gifCache
+    if (activeCategory === 'video') return videoCache
     if (activeCategory === 'story') return storyCache
     return { loading: false }
   }
@@ -200,12 +200,12 @@ function Gallery({ sensitivityFilter }) {
           <span className="category-count">{filterBySensitivity(staticCache.data || []).length}</span>
         </button>
         <button
-          className={`category-button ${activeCategory === 'gif' ? 'active' : ''}`}
-          onClick={() => setActiveCategory('gif')}
+          className={`category-button ${activeCategory === 'video' ? 'active' : ''}`}
+          onClick={() => setActiveCategory('video')}
         >
           <span className="category-icon">🎬</span>
           <span>Video Gallery</span>
-          <span className="category-count">{filterBySensitivity(gifCache.data || []).length}</span>
+          <span className="category-count">{filterBySensitivity(videoCache.data || []).length}</span>
         </button>
         <button
           className={`category-button ${activeCategory === 'story' ? 'active' : ''}`}
@@ -245,7 +245,7 @@ function Gallery({ sensitivityFilter }) {
           {selectedAlbum && selectedType === 'static' && (
             <StaticViewer album={selectedAlbum} onClose={handleCloseViewer} />
           )}
-          {selectedAlbum && selectedType === 'gif' && (
+          {selectedAlbum && selectedType === 'video' && (
             <VideoViewer album={selectedAlbum} onClose={handleCloseViewer} />
           )}
           {selectedAlbum && selectedType === 'story' && ENABLE_STORY_GALLERY && (

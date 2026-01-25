@@ -14,4 +14,6 @@ services:
       - /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas
     environment:
       - NODE_ENV=production
+    env_file:
+      - .env
     restart: unless-stopped

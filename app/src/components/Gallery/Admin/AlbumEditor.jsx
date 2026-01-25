@@ -218,7 +218,7 @@ function AlbumEditor({ type, album, onClose }) {
   const handleFiles = (files) => {
     // For gif type, allow both images and videos. For static, only images.
     const allowedFiles = files.filter(file => {
-      if (type === 'gif') {
+      if (type === 'video') {
         // Allow images and videos for gif gallery
         return file.type.startsWith('image/') || file.type.startsWith('video/')
       } else {
@@ -228,7 +228,7 @@ function AlbumEditor({ type, album, onClose }) {
     })
 
     if (allowedFiles.length === 0) {
-      if (type === 'gif') {
+      if (type === 'video') {
         toast.warning('Please select image or video files only')
       } else {
         toast.warning('Please select image files only')
@@ -533,14 +533,14 @@ function AlbumEditor({ type, album, onClose }) {
                   type="file"
                   id="file-upload"
                   multiple
-                  accept={type === 'gif' ? 'image/*,video/*' : 'image/*'}
+                  accept={type === 'video' ? 'image/*,video/*' : 'image/*'}
                   onChange={handleFileSelect}
                   style={{ display: 'none' }}
                 />
                 <label htmlFor="file-upload" className="file-upload-label">
                   <div className="file-upload-icon">📁</div>
-                  <p>Drag & drop {type === 'gif' ? 'images or videos' : 'images'} here or click to browse</p>
-                  <small>Supports: {type === 'gif' ? 'JPG, PNG, GIF, WebP, MP4, MOV, AVI, WebM' : 'JPG, PNG, GIF, WebP'}</small>
+                  <p>Drag & drop {type === 'video' ? 'images or videos' : 'images'} here or click to browse</p>
+                  <small>Supports: {type === 'video' ? 'JPG, PNG, GIF, WebP, MP4, MOV, AVI, WebM' : 'JPG, PNG, GIF, WebP'}</small>
                 </label>
               </div>
 

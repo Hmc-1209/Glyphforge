@@ -660,21 +660,21 @@ app.get('/api/gallery/static', async (req, res) => {
   }
 })
 
-// API route - get all GIF galleries
-app.get('/api/gallery/gif', async (req, res) => {
+// API route - get all video galleries
+app.get('/api/gallery/video', async (req, res) => {
   try {
-    const gifPath = path.join(GALLERY_FOLDER_PATH, 'gif')
+    const videoPath = path.join(GALLERY_FOLDER_PATH, 'video')
 
-    if (!fs.existsSync(gifPath)) {
+    if (!fs.existsSync(videoPath)) {
       return res.json([])
     }
 
-    const folders = fs.readdirSync(gifPath).filter(file => {
-      return fs.statSync(path.join(gifPath, file)).isDirectory()
+    const folders = fs.readdirSync(videoPath).filter(file => {
+      return fs.statSync(path.join(videoPath, file)).isDirectory()
     })
 
     const albums = folders.map(folder => {
-      const folderPath = path.join(gifPath, folder)
+      const folderPath = path.join(videoPath, folder)
       const metaPath = path.join(folderPath, 'meta.json')
 
       let meta = {
@@ -700,12 +700,12 @@ app.get('/api/gallery/gif', async (req, res) => {
       }
 
       const images = meta.images.map(filename =>
-        `/${GALLERY_FOLDER_NAME}/gif/${folder}/${filename}`
+        `/${GALLERY_FOLDER_NAME}/video/${folder}/${filename}`
       )
 
       const coverPath = path.join(folderPath, 'cover.jpg')
       const cover = fs.existsSync(coverPath)
-        ? `/${GALLERY_FOLDER_NAME}/gif/${folder}/cover.jpg`
+        ? `/${GALLERY_FOLDER_NAME}/video/${folder}/cover.jpg`
         : images[0] || ''
 
       return {
@@ -720,7 +720,7 @@ app.get('/api/gallery/gif', async (req, res) => {
 
     res.json(albums)
   } catch (error) {
-    console.error('Error reading GIF galleries:', error)
+    console.error('Error reading video galleries:', error)
     res.status(500).json({ error: 'Failed to load galleries' })
   }
 })
@@ -1122,7 +1122,7 @@ app.get('/api/metadata', (req, res) => {
       loras: { lastModified: 0 },
       gallery: {
         static: { lastModified: 0 },
-        gif: { lastModified: 0 },
+        video: { lastModified: 0 },
         story: { lastModified: 0 }
       }
     }
@@ -1165,7 +1165,7 @@ app.get('/api/metadata', (req, res) => {
     }
 
     // Get gallery folders last modified times
-    const galleryTypes = ['static', 'gif', 'story']
+    const galleryTypes = ['static', 'video', 'story']
     galleryTypes.forEach(type => {
       const typePath = path.join(GALLERY_FOLDER_PATH, type)
       if (fs.existsSync(typePath)) {
