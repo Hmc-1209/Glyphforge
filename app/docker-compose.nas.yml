@@ -9,10 +9,10 @@ services:
       - "40001:5173"
     volumes:
       # Modify to your actual NAS path
-      # Synology example: /volume1/docker/glyphforge-data/prompt:/datas/prompt
-      # QNAP example: /share/Container/glyphforge-data/prompt:/datas/prompt
-      # TrueNAS example: /mnt/tank/docker/glyphforge-data/prompt:/datas/prompt
-      - /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas/prompt
+      # Synology example: /volume1/docker/glyphforge-data:/datas
+      # QNAP example: /share/Container/glyphforge-data:/datas
+      # TrueNAS example: /mnt/tank/docker/glyphforge-data:/datas
+      - /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas
     environment:
       - NODE_ENV=production
     restart: unless-stopped

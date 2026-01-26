@@ -10,5 +10,9 @@
   "galleryFolder": {
     "path": "/datas/gallery",
     "name": "gallery"
+  },
+  "requestFolder": {
+    "path": "/datas/requests",
+    "name": "requests"
   }
 }

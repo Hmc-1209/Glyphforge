@@ -32,6 +32,11 @@ const GALLERY_FOLDER_PATH = path.isAbsolute(config.galleryFolder.path)
   : path.join(__dirname, config.galleryFolder.path)
 const GALLERY_FOLDER_NAME = config.galleryFolder.name
 
+const REQUEST_FOLDER_PATH = path.isAbsolute(config.requestFolder.path)
+  ? config.requestFolder.path
+  : path.join(__dirname, config.requestFolder.path)
+const REQUEST_FOLDER_NAME = config.requestFolder.name
+
 const app = express()
 const PORT = 3001
 
@@ -516,6 +521,9 @@ function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Invalid token' })
   }
 }
+
+// Alias for backwards compatibility
+const verifyToken = authMiddleware
 
 // Admin login endpoint
 app.post('/api/gallery/admin/login', async (req, res) => {
@@ -1199,6 +1207,236 @@ app.get('/api/metadata', (req, res) => {
   } catch (error) {
     console.error('Error reading metadata:', error)
     res.status(500).json({ error: 'Failed to load metadata' })
+  }
+})
+
+// ========================================
+// REQUESTS API
+// ========================================
+
+// Ensure request directory exists
+const ensureRequestDir = () => {
+  if (!fs.existsSync(REQUEST_FOLDER_PATH)) {
+    fs.mkdirSync(REQUEST_FOLDER_PATH, { recursive: true })
+  }
+}
+
+// Get all requests
+app.get('/api/requests', (req, res) => {
+  try {
+    ensureRequestDir()
+
+    const folders = fs.readdirSync(REQUEST_FOLDER_PATH).filter(file => {
+      const fullPath = path.join(REQUEST_FOLDER_PATH, file)
+      return fs.statSync(fullPath).isDirectory()
+    })
+
+    const requests = folders.map(folder => {
+      const folderPath = path.join(REQUEST_FOLDER_PATH, folder)
+      const metaPath = path.join(folderPath, 'meta.json')
+
+      // Default metadata
+      let meta = {
+        id: folder,
+        type: 'lora',
+        status: 'pending',
+        characterName: '',
+        outfit: '',
+        channelLink: '',
+        socialMediaLink: '',
+        createdAt: new Date().toISOString(),
+        order: 999999
+      }
+
+      // Read meta.json
+      if (fs.existsSync(metaPath)) {
+        try {
+          const metaData = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          meta = { ...meta, ...metaData, id: folder } // Ensure id matches folder name
+        } catch (error) {
+          console.error(`Error parsing meta.json for request ${folder}:`, error)
+        }
+      }
+
+      return meta
+    })
+
+    // Sort by order field (lowest first)
+    requests.sort((a, b) => (a.order || 999999) - (b.order || 999999))
+
+    res.json(requests)
+  } catch (error) {
+    console.error('Error reading requests:', error)
+    res.status(500).json({ error: 'Failed to load requests' })
+  }
+})
+
+// Create new request
+app.post('/api/requests', (req, res) => {
+  try {
+    ensureRequestDir()
+
+    const id = Date.now().toString()
+    const requestPath = path.join(REQUEST_FOLDER_PATH, id)
+
+    // Create request folder
+    fs.mkdirSync(requestPath, { recursive: true })
+
+    // Get highest order number from existing requests
+    const folders = fs.readdirSync(REQUEST_FOLDER_PATH).filter(file => {
+      const fullPath = path.join(REQUEST_FOLDER_PATH, file)
+      return fs.statSync(fullPath).isDirectory()
+    })
+
+    let maxOrder = -1
+    folders.forEach(folder => {
+      const metaPath = path.join(REQUEST_FOLDER_PATH, folder, 'meta.json')
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          if (meta.order !== undefined && meta.order > maxOrder) {
+            maxOrder = meta.order
+          }
+        } catch (error) {
+          // Ignore parsing errors
+        }
+      }
+    })
+
+    const newRequest = {
+      id,
+      ...req.body,
+      status: req.body.status || 'pending',
+      createdAt: new Date().toISOString(),
+      order: maxOrder + 1
+    }
+
+    // Write meta.json
+    const metaPath = path.join(requestPath, 'meta.json')
+    fs.writeFileSync(metaPath, JSON.stringify(newRequest, null, 2))
+
+    res.status(201).json(newRequest)
+  } catch (error) {
+    console.error('Error creating request:', error)
+    res.status(500).json({ error: 'Failed to create request' })
+  }
+})
+
+// Update request status (admin only)
+app.put('/api/requests/:id/status', verifyToken, (req, res) => {
+  try {
+    const { id } = req.params
+    const { status } = req.body
+    const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
+
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).json({ error: 'Request not found' })
+    }
+
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+    meta.status = status
+    meta.updatedAt = new Date().toISOString()
+
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+
+    res.json(meta)
+  } catch (error) {
+    console.error('Error updating request status:', error)
+    res.status(500).json({ error: 'Failed to update request status' })
+  }
+})
+
+// Update entire request (admin only)
+app.put('/api/requests/:id', verifyToken, (req, res) => {
+  try {
+    const { id } = req.params
+    const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
+
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).json({ error: 'Request not found' })
+    }
+
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+
+    // Update meta with new data, preserving id, createdAt, and order
+    const updatedMeta = {
+      ...meta,
+      ...req.body,
+      id, // Preserve original ID
+      createdAt: meta.createdAt, // Preserve creation date
+      order: meta.order, // Preserve order
+      updatedAt: new Date().toISOString()
+    }
+
+    fs.writeFileSync(metaPath, JSON.stringify(updatedMeta, null, 2))
+
+    res.json(updatedMeta)
+  } catch (error) {
+    console.error('Error updating request:', error)
+    res.status(500).json({ error: 'Failed to update request' })
+  }
+})
+
+// Delete request (admin only)
+app.delete('/api/requests/:id', verifyToken, (req, res) => {
+  try {
+    const { id } = req.params
+    const requestPath = path.join(REQUEST_FOLDER_PATH, id)
+
+    if (!fs.existsSync(requestPath)) {
+      return res.status(404).json({ error: 'Request not found' })
+    }
+
+    // Delete entire folder
+    fs.rmSync(requestPath, { recursive: true, force: true })
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting request:', error)
+    res.status(500).json({ error: 'Failed to delete request' })
+  }
+})
+
+// Reorder requests (admin only)
+app.put('/api/requests/reorder', verifyToken, (req, res) => {
+  try {
+    const { orderedIds } = req.body
+
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: 'orderedIds must be an array' })
+    }
+
+    // Update order field in each request's meta.json
+    orderedIds.forEach((id, index) => {
+      const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          meta.order = index
+          fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+        } catch (error) {
+          console.error(`Error updating order for request ${id}:`, error)
+        }
+      }
+    })
+
+    // Return updated requests
+    const requests = orderedIds.map(id => {
+      const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
+      if (fs.existsSync(metaPath)) {
+        try {
+          return JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+        } catch (error) {
+          return null
+        }
+      }
+      return null
+    }).filter(Boolean)
+
+    res.json(requests)
+  } catch (error) {
+    console.error('Error reordering requests:', error)
+    res.status(500).json({ error: 'Failed to reorder requests' })
   }
 })
 

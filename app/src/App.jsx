@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import './App.css'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import Gallery from './components/Gallery/Gallery'
+import Request from './components/Request/Request'
 import { useDataCache } from './hooks/useDataCache'
 import { ToastProvider } from './components/Toast/ToastContext'
 
@@ -10,6 +11,7 @@ function App() {
     // Load from localStorage, default to 'lora' for new users
     return localStorage.getItem('activeTab') || 'lora'
   })
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [selectedPrompt, setSelectedPrompt] = useState(null)
   const [selectedLora, setSelectedLora] = useState(null)
   const [selectedLoraVersion, setSelectedLoraVersion] = useState(null)
@@ -44,6 +46,14 @@ function App() {
 
   // Scroll to top button visibility
   const [showScrollTop, setShowScrollTop] = useState(false)
+
+  // Shared admin state
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    const token = localStorage.getItem('adminToken')
+    const expiry = localStorage.getItem('adminTokenExpiry')
+    return token && expiry && Date.now() < parseInt(expiry)
+  })
+  const [adminMode, setAdminMode] = useState(false)
 
   // Use data cache for prompts and loras
   const promptsCache = useDataCache('prompts', async () => {
@@ -182,6 +192,24 @@ function App() {
       await fetch(`/api/loras/${loraId}/download`, { method: 'POST' })
     } catch (error) {
       console.error('Failed to download:', error)
+    }
+  }
+
+  const handleAdminLoginSuccess = (token) => {
+    setIsLoggedIn(true)
+    setAdminMode(true)
+  }
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem('adminToken')
+    localStorage.removeItem('adminTokenExpiry')
+    setIsLoggedIn(false)
+    setAdminMode(false)
+  }
+
+  const handleAdminModeToggle = () => {
+    if (isLoggedIn) {
+      setAdminMode(!adminMode)
     }
   }
 
@@ -438,6 +466,7 @@ function App() {
       <div className="app-container">
       {/* Floating Sensitivity Toggle */}
       <div className="sensitivity-toggle-container">
+        <span className="sensitivity-label">Safety Switch</span>
         <div className="sensitivity-toggle">
           <button
             className={`toggle-option ${sensitivityFilter === 'sfw' ? 'active' : ''}`}
@@ -456,6 +485,87 @@ function App() {
       </div>
 
       <div className="main-card">
+        {/* Hamburger Menu Button (Mobile Only) */}
+        <button
+          className="hamburger-menu"
+          onClick={() => setIsSidebarOpen(true)}
+          aria-label="Open navigation menu"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+
+        {/* Mobile Sidebar */}
+        {isSidebarOpen && (
+          <>
+            <div
+              className="sidebar-overlay"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+            <div className="mobile-sidebar">
+              <div className="sidebar-header">
+                <h3>Navigation</h3>
+                <button
+                  className="sidebar-close"
+                  onClick={() => setIsSidebarOpen(false)}
+                  aria-label="Close navigation menu"
+                >
+                  ×
+                </button>
+              </div>
+              <nav className="sidebar-nav">
+                <button
+                  className={`sidebar-tab ${activeTab === 'lora' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('lora')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  LoRA
+                </button>
+                <button
+                  className={`sidebar-tab ${activeTab === 'prompt' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('prompt')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  Prompt
+                </button>
+                <button
+                  className={`sidebar-tab ${activeTab === 'gallery' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('gallery')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  Collection
+                </button>
+                <button
+                  className={`sidebar-tab ${activeTab === 'request' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('request')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  Request
+                </button>
+                <button
+                  className={`sidebar-tab ${activeTab === 'statistics' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('statistics')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  Statistics
+                </button>
+              </nav>
+            </div>
+          </>
+        )}
+
+        {/* Desktop Tab Container */}
         <div className="tab-container">
           <button
             className={`tab ${activeTab === 'lora' ? 'active' : ''}`}
@@ -474,6 +584,12 @@ function App() {
             onClick={() => setActiveTab('gallery')}
           >
             Collection
+          </button>
+          <button
+            className={`tab ${activeTab === 'request' ? 'active' : ''}`}
+            onClick={() => setActiveTab('request')}
+          >
+            Request
           </button>
           <button
             className={`tab ${activeTab === 'statistics' ? 'active' : ''}`}
@@ -603,8 +719,12 @@ function App() {
 
           {activeTab === 'lora' && (
             <div className="tab-content">
-              <h2>LoRA Gallery</h2>
-              <p>Browse and download LoRA models</p>
+              <div className="tab-header">
+                <div>
+                  <h2>LoRA Gallery</h2>
+                  <p>Browse and download LoRA models</p>
+                </div>
+              </div>
 
               <div className="filter-container">
                 <button
@@ -711,26 +831,50 @@ function App() {
 
           {activeTab === 'gallery' && (
             <div className="tab-content">
-              <Gallery sensitivityFilter={sensitivityFilter} />
+              <Gallery
+                sensitivityFilter={sensitivityFilter}
+                isLoggedIn={isLoggedIn}
+                adminMode={adminMode}
+                onAdminLoginSuccess={handleAdminLoginSuccess}
+                onAdminLogout={handleAdminLogout}
+                onAdminModeToggle={handleAdminModeToggle}
+              />
+            </div>
+          )}
+
+          {activeTab === 'request' && (
+            <div className="tab-content">
+              <Request
+                isLoggedIn={isLoggedIn}
+                adminMode={adminMode}
+                onAdminLoginSuccess={handleAdminLoginSuccess}
+                onAdminLogout={handleAdminLogout}
+                onAdminModeToggle={handleAdminModeToggle}
+              />
             </div>
           )}
 
           {activeTab === 'statistics' && (
             <div className="tab-content statistics-content">
-              <h2>Statistics Dashboard</h2>
-              <p>
-                Overview of prompts and LoRA usage data
-                {sensitivityFilter !== 'all' && (
-                  <span className="stats-filter-badge">
-                    {' '}· Filtered by: {sensitivityFilter.toUpperCase()}
-                  </span>
-                )}
-              </p>
+              <div className="tab-header">
+                <div>
+                  <h2>Statistics Dashboard</h2>
+                  <p>
+                    Overview of prompts and LoRA usage data
+                    {sensitivityFilter !== 'all' && (
+                      <span className="stats-filter-badge">
+                        {' '}· Filtered by: {sensitivityFilter.toUpperCase()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
 
-              {!statistics ? (
-                <div className="loading-message">Loading statistics...</div>
-              ) : (
-                <div className="statistics-grid">
+              <div className="content-section">
+                {!statistics ? (
+                  <div className="loading-message">Loading statistics...</div>
+                ) : (
+                  <div className="statistics-grid">
                   {/* Overview Cards */}
                   <div className="stats-overview">
                     <div className="stat-card">
@@ -811,7 +955,7 @@ function App() {
                     <div className="chart-row">
                       <div className="chart-container half-width">
                         <h4>Prompts by Character Count</h4>
-                        <ResponsiveContainer width="100%" height={200}>
+                        <ResponsiveContainer width="100%" height={180}>
                           <PieChart>
                             <Pie
                               data={Object.entries(statistics.prompts.byCharacter).map(([key, value]) => ({
@@ -822,7 +966,7 @@ function App() {
                               cy="50%"
                               labelLine={false}
                               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                              outerRadius={70}
+                              outerRadius={60}
                               fill="#8884d8"
                               dataKey="value"
                             >
@@ -847,7 +991,7 @@ function App() {
 
                       <div className="chart-container half-width">
                         <h4>Prompts by Sensitivity</h4>
-                        <ResponsiveContainer width="100%" height={200}>
+                        <ResponsiveContainer width="100%" height={180}>
                           <PieChart>
                             <Pie
                               data={Object.entries(statistics.prompts.bySensitivity).map(([key, value]) => ({
@@ -858,7 +1002,7 @@ function App() {
                               cy="50%"
                               labelLine={false}
                               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                              outerRadius={70}
+                              outerRadius={60}
                               fill="#8884d8"
                               dataKey="value"
                             >
@@ -1006,7 +1150,7 @@ function App() {
                     <div className="chart-row">
                       <div className="chart-container half-width">
                         <h4>LoRAs by Gender</h4>
-                        <ResponsiveContainer width="100%" height={200}>
+                        <ResponsiveContainer width="100%" height={180}>
                           <PieChart>
                             <Pie
                               data={Object.entries(statistics.loras.byGender).map(([key, value]) => ({
@@ -1017,7 +1161,7 @@ function App() {
                               cy="50%"
                               labelLine={false}
                               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                              outerRadius={70}
+                              outerRadius={60}
                               fill="#8884d8"
                               dataKey="value"
                             >
@@ -1042,7 +1186,7 @@ function App() {
 
                       <div className="chart-container half-width">
                         <h4>LoRAs by Model</h4>
-                        <ResponsiveContainer width="100%" height={200}>
+                        <ResponsiveContainer width="100%" height={180}>
                           <PieChart>
                             <Pie
                               data={Object.entries(statistics.loras.byModel).map(([key, value]) => ({
@@ -1053,7 +1197,7 @@ function App() {
                               cy="50%"
                               labelLine={false}
                               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                              outerRadius={70}
+                              outerRadius={60}
                               fill="#8884d8"
                               dataKey="value"
                             >
@@ -1078,7 +1222,8 @@ function App() {
                     </div>
                   </div>
                 </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </div>

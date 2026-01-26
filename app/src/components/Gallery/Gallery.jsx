@@ -11,15 +11,13 @@ import './Gallery.css'
 // Feature flag to enable/disable Story Gallery
 const ENABLE_STORY_GALLERY = false
 
-function Gallery({ sensitivityFilter }) {
+function Gallery({ sensitivityFilter, isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, onAdminModeToggle }) {
   const [activeCategory, setActiveCategory] = useState(() => {
     // Load from localStorage, default to 'static' for new users
     return localStorage.getItem('galleryCategory') || 'static'
   })
   const [selectedAlbum, setSelectedAlbum] = useState(null)
   const [selectedType, setSelectedType] = useState(null)
-  const [adminMode, setAdminMode] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
 
   // Use data cache hooks for each category (lazy loading - only load when needed)
@@ -63,21 +61,6 @@ function Gallery({ sensitivityFilter }) {
   useEffect(() => {
     localStorage.setItem('galleryCategory', activeCategory)
   }, [activeCategory])
-
-  // Check if admin is logged in
-  useEffect(() => {
-    const token = localStorage.getItem('adminToken')
-    const expiry = localStorage.getItem('adminTokenExpiry')
-
-    if (token && expiry && Date.now() < parseInt(expiry)) {
-      setIsLoggedIn(true)
-    } else {
-      // Clear expired token
-      localStorage.removeItem('adminToken')
-      localStorage.removeItem('adminTokenExpiry')
-      setIsLoggedIn(false)
-    }
-  }, [])
 
   // Load albums when category changes (only if not already loaded)
   useEffect(() => {
@@ -157,11 +140,10 @@ function Gallery({ sensitivityFilter }) {
 
   const handleAdminClick = () => {
     if (isLoggedIn) {
-      const newAdminMode = !adminMode
-      setAdminMode(newAdminMode)
+      onAdminModeToggle()
 
       // Refresh cache when exiting admin mode
-      if (!newAdminMode) {
+      if (adminMode) {
         console.log('👀 Exiting admin mode, refreshing cache...')
         handleRefresh()
       }
@@ -171,16 +153,12 @@ function Gallery({ sensitivityFilter }) {
   }
 
   const handleLoginSuccess = (token) => {
-    setIsLoggedIn(true)
+    onAdminLoginSuccess(token)
     setShowLogin(false)
-    setAdminMode(true)
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('adminToken')
-    localStorage.removeItem('adminTokenExpiry')
-    setIsLoggedIn(false)
-    setAdminMode(false)
+    onAdminLogout()
   }
 
   const handleRefresh = () => {
@@ -243,42 +221,47 @@ function Gallery({ sensitivityFilter }) {
       </div>
 
       {/* Content Area */}
-      {adminMode ? (
-        <AdminPanel
-          type={activeCategory}
-          albums={currentAlbums}
-          onLogout={handleLogout}
-          onRefresh={handleRefresh}
-        />
-      ) : (
-        <>
-          {/* Album Grid */}
-          {currentCache.loading ? (
-            <div className="gallery-loading">Loading...</div>
-          ) : (
-            <AlbumGrid
-              albums={currentAlbums}
-              onAlbumClick={handleAlbumClick}
-              type={activeCategory}
-            />
-          )}
+      <div className="gallery-content-section">
+        {adminMode ? (
+          <AdminPanel
+            type={activeCategory}
+            albums={currentAlbums}
+            onLogout={handleLogout}
+            onRefresh={handleRefresh}
+          />
+        ) : (
+          <>
+            {/* Album Grid */}
+            {currentCache.loading ? (
+              <div className="gallery-loading">Loading...</div>
+            ) : (
+              <AlbumGrid
+                albums={currentAlbums}
+                onAlbumClick={handleAlbumClick}
+                type={activeCategory}
+              />
+            )}
 
-          {/* Viewers */}
-          {selectedAlbum && selectedType === 'static' && (
-            <StaticViewer album={selectedAlbum} onClose={handleCloseViewer} />
-          )}
-          {selectedAlbum && selectedType === 'video' && (
-            <VideoViewer album={selectedAlbum} onClose={handleCloseViewer} />
-          )}
-          {selectedAlbum && selectedType === 'story' && ENABLE_STORY_GALLERY && (
-            <StoryViewer album={selectedAlbum} onClose={handleCloseViewer} />
-          )}
-        </>
-      )}
+            {/* Viewers */}
+            {selectedAlbum && selectedType === 'static' && (
+              <StaticViewer album={selectedAlbum} onClose={handleCloseViewer} />
+            )}
+            {selectedAlbum && selectedType === 'video' && (
+              <VideoViewer album={selectedAlbum} onClose={handleCloseViewer} />
+            )}
+            {selectedAlbum && selectedType === 'story' && ENABLE_STORY_GALLERY && (
+              <StoryViewer album={selectedAlbum} onClose={handleCloseViewer} />
+            )}
+          </>
+        )}
+      </div>
 
       {/* Admin Login Modal */}
       {showLogin && (
-        <AdminLogin onLoginSuccess={handleLoginSuccess} />
+        <AdminLogin
+          onLoginSuccess={handleLoginSuccess}
+          onClose={() => setShowLogin(false)}
+        />
       )}
     </div>
   )

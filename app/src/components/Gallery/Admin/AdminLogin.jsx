@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-function AdminLogin({ onLoginSuccess }) {
+function AdminLogin({ onLoginSuccess, onClose }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -39,8 +39,8 @@ function AdminLogin({ onLoginSuccess }) {
   }
 
   return (
-    <div className="admin-login-overlay">
-      <div className="admin-login-card">
+    <div className="admin-login-overlay" onClick={onClose}>
+      <div className="admin-login-card" onClick={(e) => e.stopPropagation()}>
         <h2>Admin Login</h2>
         <p className="admin-login-subtitle">Gallery Management</p>
 

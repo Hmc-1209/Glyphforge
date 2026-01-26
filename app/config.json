@@ -10,5 +10,9 @@
   "galleryFolder": {
     "path": "D:\\Glyphforge-data\\gallery\\",
     "name": "gallery"
+  },
+  "requestFolder": {
+    "path": "D:\\Glyphforge-data\\requests\\",
+    "name": "requests"
   }
 }
