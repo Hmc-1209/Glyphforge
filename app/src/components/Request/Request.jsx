@@ -328,7 +328,7 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
         </div>
       ) : (
         <div className="request-list">
-          {requests.map((request) => (
+          {requests.map((request, index) => (
             <div key={request.id} className="request-card">
               <div className="request-card-header">
                 <span className="request-type-badge">{request.type.toUpperCase()}</span>
@@ -349,15 +349,15 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
                   <div className="request-field">
                     <strong>Channel:</strong>{' '}
                     <a href={request.channelLink} target="_blank" rel="noopener noreferrer">
-                      {request.channelLink}
+                      Link
                     </a>
                   </div>
                 )}
                 {request.socialMediaLink && (
                   <div className="request-field">
-                    <strong>Social Media:</strong>{' '}
+                    <strong>Social:</strong>{' '}
                     <a href={request.socialMediaLink} target="_blank" rel="noopener noreferrer">
-                      {request.socialMediaLink}
+                      Link
                     </a>
                   </div>
                 )}
