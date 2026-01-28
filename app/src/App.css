@@ -351,15 +351,15 @@ label {
 
 .lora-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
 }
 
 .lora-card {
   background: rgba(31, 35, 50, 0.6);
   border: 1px solid rgba(99, 130, 191, 0.2);
-  border-radius: 12px;
-  padding: 1rem;
+  border-radius: 8px;
+  padding: 0.5rem;
   transition: all 0.3s ease;
   cursor: pointer;
 }
@@ -392,33 +392,39 @@ label {
 }
 
 .lora-character {
-  font-size: 1rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: #8ba4d0;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.15rem;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lora-cloth {
-  font-size: 0.85rem;
+  font-size: 0.7rem;
   font-weight: 400;
   color: #9ca3b4;
   margin-top: 0;
   margin-bottom: 0;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .prompt-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
 }
 
 .prompt-card {
   background: rgba(31, 35, 50, 0.6);
   border: 1px solid rgba(99, 130, 191, 0.2);
-  border-radius: 12px;
-  padding: 1rem;
+  border-radius: 8px;
+  padding: 0.5rem;
   transition: all 0.3s ease;
   cursor: pointer;
 }
@@ -642,6 +648,27 @@ label {
   flex-shrink: 0;
 }
 
+/* Tablet (768px - 1024px) */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .lora-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .prompt-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .lora-character {
+    font-size: 0.7rem;
+  }
+
+  .lora-cloth {
+    font-size: 0.6rem;
+  }
+}
+
 @media (max-width: 768px) {
   .app-container {
     padding: 4px;
@@ -710,13 +737,13 @@ label {
   }
 
   .lora-grid {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(3, 1fr); /* Fixed 3 columns on mobile */
+    gap: 0.5rem;
   }
 
   .prompt-grid {
-    grid-template-columns: repeat(2, 1fr); /* Fixed 2 columns on mobile */
-    gap: 1rem;
+    grid-template-columns: repeat(3, 1fr); /* Fixed 3 columns on mobile */
+    gap: 0.5rem;
   }
 
   .popup-content {

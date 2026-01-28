@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import AdminLogin from '../Gallery/Admin/AdminLogin'
 import './Request.css'
 
@@ -11,6 +11,22 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
   const [editingRequest, setEditingRequest] = useState(null)
   const [requestType, setRequestType] = useState('lora')
 
+  // Expanded card tracking
+  const [expandedCards, setExpandedCards] = useState(new Set())
+
+  // Category collapse state (persisted in localStorage)
+  const [collapsedCategories, setCollapsedCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('request-collapsed-categories')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
+
+  // Status filter
+  const [statusFilter, setStatusFilter] = useState('all')
+
   // Form states
   const [formData, setFormData] = useState({
     characterName: '',
@@ -19,6 +35,11 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     socialMediaLink: ''
   })
   const [formErrors, setFormErrors] = useState({})
+
+  // Persist collapsed categories
+  useEffect(() => {
+    localStorage.setItem('request-collapsed-categories', JSON.stringify([...collapsedCategories]))
+  }, [collapsedCategories])
 
   // Load requests on mount
   useEffect(() => {
@@ -299,6 +320,188 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     }
   }
 
+  // Toggle card expand/collapse
+  const toggleCard = (cardId) => {
+    setExpandedCards(prev => {
+      const next = new Set(prev)
+      if (next.has(cardId)) {
+        next.delete(cardId)
+      } else {
+        next.add(cardId)
+      }
+      return next
+    })
+  }
+
+  // Toggle category collapse
+  const toggleCategory = (categoryKey) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(categoryKey)) {
+        next.delete(categoryKey)
+      } else {
+        next.add(categoryKey)
+      }
+      return next
+    })
+  }
+
+  // Filter requests by status, sort by date (earliest first), completed always last
+  const sortRequests = (list) => {
+    const byDate = (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+    const nonCompleted = list.filter(r => r.status !== 'completed').sort(byDate)
+    const completed = list.filter(r => r.status === 'completed').sort(byDate)
+    return [...nonCompleted, ...completed]
+  }
+
+  const filteredRequests = sortRequests(
+    statusFilter === 'all'
+      ? requests
+      : requests.filter(r => r.status === statusFilter)
+  )
+
+  // Group by type
+  const requestTypes = [
+    { key: 'lora', label: 'LoRA Requests', icon: '🎨' }
+    // Future types can be added here:
+    // { key: 'prompt', label: 'Prompt Requests', icon: '📝' },
+  ]
+
+  // Get status counts for filter chips
+  const statusCounts = {
+    all: requests.length,
+    pending: requests.filter(r => r.status === 'pending').length,
+    'in-progress': requests.filter(r => r.status === 'in-progress').length,
+    completed: requests.filter(r => r.status === 'completed').length,
+    rejected: requests.filter(r => r.status === 'rejected').length
+  }
+
+  // Render a compact request card
+  const renderRequestCard = (request, index) => {
+    const isExpanded = expandedCards.has(request.id)
+    const hasDetails = request.channelLink || request.socialMediaLink
+
+    const isCompleted = request.status === 'completed'
+
+    return (
+      <div
+        key={request.id}
+        className={`request-card ${isExpanded ? 'expanded' : 'compact'} ${isCompleted ? 'completed' : ''}`}
+        onClick={() => !adminMode && toggleCard(request.id)}
+      >
+        {/* Completed overlay */}
+        {isCompleted && <div className="request-card-completed-overlay" />}
+
+        {/* Compact view - always visible */}
+        <div className="request-card-compact">
+          <div className="request-card-header">
+            <span
+              className="request-status-badge"
+              style={{ backgroundColor: getStatusColor(request.status) }}
+            >
+              {getStatusText(request.status)}
+            </span>
+            {hasDetails && !adminMode && (
+              <span className={`request-expand-icon ${isExpanded ? 'expanded' : ''}`}>
+                ▼
+              </span>
+            )}
+          </div>
+
+          <div className="request-card-summary">
+            <h3>{request.characterName}</h3>
+            <p className="request-outfit">{request.outfit}</p>
+          </div>
+        </div>
+
+        {/* Expanded details - shown on click */}
+        {isExpanded && (
+          <div className="request-card-details">
+            {request.channelLink && (
+              <div className="request-field">
+                <strong>Channel:</strong>{' '}
+                <a
+                  href={request.channelLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Link
+                </a>
+              </div>
+            )}
+            {request.socialMediaLink && (
+              <div className="request-field">
+                <strong>Social:</strong>{' '}
+                <a
+                  href={request.socialMediaLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Link
+                </a>
+              </div>
+            )}
+            <div className="request-date">
+              {new Date(request.createdAt).toLocaleDateString()}
+            </div>
+          </div>
+        )}
+
+        {/* Admin controls */}
+        {adminMode && (
+          <div className="request-card-admin" onClick={(e) => e.stopPropagation()}>
+            <div className="request-admin-controls">
+              <select
+                value={request.status}
+                onChange={(e) => handleStatusChange(request.id, e.target.value)}
+                className="status-select"
+              >
+                <option value="pending">Pending</option>
+                <option value="in-progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="rejected">Rejected</option>
+              </select>
+              <button
+                className="admin-button edit-button"
+                onClick={() => handleOpenEditModal(request)}
+                title="Edit request"
+              >
+                ✎
+              </button>
+              <button
+                className="admin-button delete-button"
+                onClick={() => handleDelete(request.id)}
+                title="Delete request"
+              >
+                🗑
+              </button>
+              <div className="order-buttons">
+                <button
+                  className="admin-button move-button"
+                  onClick={() => handleMoveUp(index)}
+                  disabled={index === 0}
+                  title="Move up"
+                >
+                  ▲
+                </button>
+                <button
+                  className="admin-button move-button"
+                  onClick={() => handleMoveDown(index)}
+                  disabled={index === requests.length - 1}
+                  title="Move down"
+                >
+                  ▼
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="request-container">
       <div className="request-header">
@@ -320,6 +523,28 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
         </div>
       </div>
 
+      {/* Status Filter Chips */}
+      {!loading && requests.length > 0 && (
+        <div className="request-status-filters">
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'pending', label: 'Pending' },
+            { key: 'in-progress', label: 'In Progress' },
+            { key: 'completed', label: 'Completed' },
+            { key: 'rejected', label: 'Rejected' }
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              className={`status-chip ${statusFilter === key ? 'active' : ''} ${key !== 'all' ? `status-chip-${key}` : ''}`}
+              onClick={() => setStatusFilter(key)}
+            >
+              {label}
+              <span className="status-chip-count">{statusCounts[key]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="request-loading">Loading requests...</div>
       ) : requests.length === 0 ? (
@@ -327,95 +552,46 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
           <p>No requests yet. Be the first to submit one!</p>
         </div>
       ) : (
-        <div className="request-list">
-          {requests.map((request, index) => (
-            <div key={request.id} className="request-card">
-              <div className="request-card-header">
-                <span className="request-type-badge">{request.type.toUpperCase()}</span>
-                <span
-                  className="request-status-badge"
-                  style={{ backgroundColor: getStatusColor(request.status) }}
+        <div className="request-categories">
+          {requestTypes.map(({ key, label, icon }) => {
+            const typeRequests = filteredRequests.filter(r => r.type === key)
+            const totalTypeRequests = requests.filter(r => r.type === key).length
+            const isCollapsed = collapsedCategories.has(key)
+
+            if (totalTypeRequests === 0) return null
+
+            return (
+              <div key={key} className="request-category-section">
+                <div
+                  className="request-category-header"
+                  onClick={() => toggleCategory(key)}
                 >
-                  {getStatusText(request.status)}
-                </span>
-              </div>
-
-              <div className="request-card-content">
-                <h3>{request.characterName}</h3>
-                <div className="request-field">
-                  <strong>Outfit:</strong> {request.outfit}
+                  <span className={`request-category-arrow ${isCollapsed ? '' : 'expanded'}`}>
+                    ▶
+                  </span>
+                  <h3 className="request-category-title">
+                    <span className="request-category-icon">{icon}</span>
+                    {label}
+                  </h3>
+                  <span className="request-category-count">
+                    {statusFilter !== 'all' ? `${typeRequests.length} / ${totalTypeRequests}` : totalTypeRequests}
+                  </span>
                 </div>
-                {request.channelLink && (
-                  <div className="request-field">
-                    <strong>Channel:</strong>{' '}
-                    <a href={request.channelLink} target="_blank" rel="noopener noreferrer">
-                      Link
-                    </a>
-                  </div>
-                )}
-                {request.socialMediaLink && (
-                  <div className="request-field">
-                    <strong>Social:</strong>{' '}
-                    <a href={request.socialMediaLink} target="_blank" rel="noopener noreferrer">
-                      Link
-                    </a>
-                  </div>
-                )}
-              </div>
 
-              <div className="request-card-footer">
-                <span className="request-date">
-                  {new Date(request.createdAt).toLocaleDateString()}
-                </span>
-                {adminMode && (
-                  <div className="request-admin-controls">
-                    <select
-                      value={request.status}
-                      onChange={(e) => handleStatusChange(request.id, e.target.value)}
-                      className="status-select"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="in-progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="rejected">Rejected</option>
-                    </select>
-                    <button
-                      className="admin-button edit-button"
-                      onClick={() => handleOpenEditModal(request)}
-                      title="Edit request"
-                    >
-                      ✎
-                    </button>
-                    <button
-                      className="admin-button delete-button"
-                      onClick={() => handleDelete(request.id)}
-                      title="Delete request"
-                    >
-                      🗑
-                    </button>
-                    <div className="order-buttons">
-                      <button
-                        className="admin-button move-button"
-                        onClick={() => handleMoveUp(index)}
-                        disabled={index === 0}
-                        title="Move up"
-                      >
-                        ▲
-                      </button>
-                      <button
-                        className="admin-button move-button"
-                        onClick={() => handleMoveDown(index)}
-                        disabled={index === requests.length - 1}
-                        title="Move down"
-                      >
-                        ▼
-                      </button>
-                    </div>
+                {!isCollapsed && (
+                  <div className="request-grid-list">
+                    {typeRequests.length > 0 ? (
+                      typeRequests.map((request, index) => renderRequestCard(request, index))
+                    ) : (
+                      <div className="request-category-empty">
+                        No {statusFilter} requests
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
