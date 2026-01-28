@@ -92,6 +92,10 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
       errors.outfit = 'Outfit name is required'
     }
 
+    if (!formData.channelLink.trim()) {
+      errors.channelLink = 'Channel link is required (livestream archive)'
+    }
+
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -379,8 +383,6 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
   // Render a compact request card
   const renderRequestCard = (request, index) => {
     const isExpanded = expandedCards.has(request.id)
-    const hasDetails = request.channelLink || request.socialMediaLink
-
     const isCompleted = request.status === 'completed'
 
     return (
@@ -401,7 +403,7 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
             >
               {getStatusText(request.status)}
             </span>
-            {hasDetails && !adminMode && (
+            {!adminMode && (
               <span className={`request-expand-icon ${isExpanded ? 'expanded' : ''}`}>
                 ▼
               </span>
@@ -417,9 +419,9 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
         {/* Expanded details - shown on click */}
         {isExpanded && (
           <div className="request-card-details">
-            {request.channelLink && (
-              <div className="request-field">
-                <strong>Channel:</strong>{' '}
+            <div className="request-field">
+              <strong>Channel:</strong>{' '}
+              {request.channelLink ? (
                 <a
                   href={request.channelLink}
                   target="_blank"
@@ -428,11 +430,13 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
                 >
                   Link
                 </a>
-              </div>
-            )}
-            {request.socialMediaLink && (
-              <div className="request-field">
-                <strong>Social:</strong>{' '}
+              ) : (
+                <span className="request-field-empty">-</span>
+              )}
+            </div>
+            <div className="request-field">
+              <strong>Social:</strong>{' '}
+              {request.socialMediaLink ? (
                 <a
                   href={request.socialMediaLink}
                   target="_blank"
@@ -441,8 +445,10 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
                 >
                   Link
                 </a>
-              </div>
-            )}
+              ) : (
+                <span className="request-field-empty">-</span>
+              )}
+            </div>
             <div className="request-date">
               {new Date(request.createdAt).toLocaleDateString()}
             </div>
@@ -656,14 +662,20 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
               </div>
 
               <div className="form-group">
-                <label htmlFor="channelLink">Channel Link</label>
+                <label htmlFor="channelLink">
+                  Channel Link (Livestream Archive) <span className="required">*</span>
+                </label>
                 <input
                   type="url"
                   id="channelLink"
                   value={formData.channelLink}
                   onChange={(e) => setFormData({ ...formData, channelLink: e.target.value })}
+                  className={formErrors.channelLink ? 'error' : ''}
                   placeholder="https://..."
                 />
+                {formErrors.channelLink && (
+                  <span className="error-message">{formErrors.channelLink}</span>
+                )}
               </div>
 
               <div className="form-group">
@@ -751,14 +763,20 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
               </div>
 
               <div className="form-group">
-                <label htmlFor="edit-channelLink">Channel Link</label>
+                <label htmlFor="edit-channelLink">
+                  Channel Link (Livestream Archive) <span className="required">*</span>
+                </label>
                 <input
                   type="url"
                   id="edit-channelLink"
                   value={formData.channelLink}
                   onChange={(e) => setFormData({ ...formData, channelLink: e.target.value })}
+                  className={formErrors.channelLink ? 'error' : ''}
                   placeholder="https://..."
                 />
+                {formErrors.channelLink && (
+                  <span className="error-message">{formErrors.channelLink}</span>
+                )}
               </div>
 
               <div className="form-group">
