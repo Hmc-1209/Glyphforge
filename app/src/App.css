@@ -724,7 +724,8 @@ label {
   }
 
   .content-area {
-    padding: 1.5rem;
+    padding: 1rem;
+    overflow-x: hidden;
   }
 
   .tab {
@@ -739,11 +740,37 @@ label {
   .lora-grid {
     grid-template-columns: repeat(3, 1fr); /* Fixed 3 columns on mobile */
     gap: 0.5rem;
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  .lora-card {
+    min-width: 0; /* Allow cards to shrink */
+    padding: 0.35rem;
   }
 
   .prompt-grid {
     grid-template-columns: repeat(3, 1fr); /* Fixed 3 columns on mobile */
     gap: 0.5rem;
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  .prompt-card {
+    min-width: 0; /* Allow cards to shrink */
+    padding: 0.35rem;
+  }
+
+  .lora-character {
+    font-size: 0.65rem;
+  }
+
+  .lora-cloth {
+    font-size: 0.55rem;
+  }
+
+  .lora-preview {
+    margin-bottom: 0.4rem;
   }
 
   .popup-content {
