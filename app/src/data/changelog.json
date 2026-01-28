@@ -1,0 +1,222 @@
+[
+  {
+    "date": "2026-01-28",
+    "changes": [
+      {
+        "hash": "531c1e8",
+        "type": "feat",
+        "message": "調整 LoRA/Prompt/Request 卡片佈局 - 桌面約10+張、平板更多、手機固定3張；Request 改為 flex-wrap、日期升序、Completed 排最後+遮罩"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-27",
+    "changes": [
+      {
+        "hash": "3d8a656",
+        "type": "fix",
+        "message": "修復 Request tab 登入問題及高度顯示問題"
+      },
+      {
+        "hash": "120b57d",
+        "type": "feat",
+        "message": "新增 Request 頁面 - 可提交 LoRA 請求、狀態篩選、Admin 管理功能"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-25",
+    "changes": [
+      {
+        "hash": "b7c2a62",
+        "type": "fix",
+        "message": "修復 Collection Gallery 中影片相簿的預覽文字顯示"
+      },
+      {
+        "hash": "efc4f9e",
+        "type": "fix",
+        "message": "修復使用者快取未更新相簿的問題"
+      },
+      {
+        "hash": "28880eb",
+        "type": "fix",
+        "message": "修復管理員認證問題及 Collection Gallery 影片路徑"
+      },
+      {
+        "hash": "f753116",
+        "type": "fix",
+        "message": "修復資料路徑問題"
+      },
+      {
+        "hash": "d04cc5c",
+        "type": "fix",
+        "message": "修復 config undefined 問題"
+      },
+      {
+        "hash": "904f71a",
+        "type": "feat",
+        "message": "將 Gallery tab 重新命名為 Collection tab"
+      },
+      {
+        "hash": "13b554e",
+        "type": "feat",
+        "message": "新增 Gallery (Collection) tab - 支援 Static/Video/Story 三種檢視模式"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-11",
+    "changes": [
+      {
+        "hash": "d40273b",
+        "type": "feat",
+        "message": "新增偶像團體篩選器"
+      },
+      {
+        "hash": "458f35d",
+        "type": "feat",
+        "message": "新增公司篩選器"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-09",
+    "changes": [
+      {
+        "hash": "b1dec34",
+        "type": "fix",
+        "message": "修復 Statistics tab 中同角色不同服裝共用數據的問題"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-06",
+    "changes": [
+      {
+        "hash": "827461a",
+        "type": "feat",
+        "message": "LoRA tab 支援多個訓練模型的結果預覽"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-04",
+    "changes": [
+      {
+        "hash": "c650468",
+        "type": "fix",
+        "message": "修復 Statistics tab hover 時 prompt 不顯示的問題"
+      },
+      {
+        "hash": "92334b6",
+        "type": "fix",
+        "message": "修復 Statistics tab 淺色 hover 背景"
+      },
+      {
+        "hash": "4b71a6b",
+        "type": "feat",
+        "message": "新增 Statistics 頁面 - 顯示 LoRA 和 Prompt 使用統計"
+      },
+      {
+        "hash": "c076b83",
+        "type": "feat",
+        "message": "支援單一角色多個訓練模型的 LoRA"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-06",
+    "changes": [
+      {
+        "hash": "0491e7e",
+        "type": "fix",
+        "message": "修復單選模式下篩選器計數問題"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-03",
+    "changes": [
+      {
+        "hash": "3318210",
+        "type": "feat",
+        "message": "新增 Prompt tab 使用指南"
+      },
+      {
+        "hash": "897192e",
+        "type": "feat",
+        "message": "新增 Prompt tab 的 Meta 和穩定度標記"
+      }
+    ]
+  },
+  {
+    "date": "2025-11-30",
+    "changes": [
+      {
+        "hash": "f515e2f",
+        "type": "feat",
+        "message": "新增最多下載和最多複製的篩選功能"
+      },
+      {
+        "hash": "9cf06f9",
+        "type": "fix",
+        "message": "修復 Docker volume 路徑"
+      },
+      {
+        "hash": "9a2f919",
+        "type": "fix",
+        "message": "修復 npm dev 模式導致重複刷新的問題"
+      },
+      {
+        "hash": "38f8860",
+        "type": "fix",
+        "message": "修復 Vite 缺少 allowedHosts 設定"
+      },
+      {
+        "hash": "67f1901",
+        "type": "fix",
+        "message": "修復 Vite config 以支援反向代理"
+      },
+      {
+        "hash": "b8e1935",
+        "type": "feat",
+        "message": "新增角色 LoRA tab"
+      }
+    ]
+  },
+  {
+    "date": "2025-11-29",
+    "changes": [
+      {
+        "hash": "c61f1a2",
+        "type": "feat",
+        "message": "新增 Prompt 篩選功能"
+      },
+      {
+        "hash": "56d1d5e",
+        "type": "feat",
+        "message": "新增 Prompt Gallery 基本篩選"
+      }
+    ]
+  },
+  {
+    "date": "2025-11-26",
+    "changes": [
+      {
+        "hash": "8b8f361",
+        "type": "feat",
+        "message": "變更連接埠為 40001"
+      },
+      {
+        "hash": "48b10b9",
+        "type": "feat",
+        "message": "新增 volume mount 路徑"
+      },
+      {
+        "hash": "82ad504",
+        "type": "feat",
+        "message": "初始化專案"
+      }
+    ]
+  }
+]

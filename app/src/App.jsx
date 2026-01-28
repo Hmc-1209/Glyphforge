@@ -3,6 +3,7 @@ import './App.css'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import Gallery from './components/Gallery/Gallery'
 import Request from './components/Request/Request'
+import Changelog from './components/Changelog/Changelog'
 import { useDataCache } from './hooks/useDataCache'
 import { ToastProvider } from './components/Toast/ToastContext'
 
@@ -560,6 +561,15 @@ function App() {
                 >
                   Statistics
                 </button>
+                <button
+                  className={`sidebar-tab ${activeTab === 'changelog' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('changelog')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  Changelog
+                </button>
               </nav>
             </div>
           </>
@@ -596,6 +606,12 @@ function App() {
             onClick={() => setActiveTab('statistics')}
           >
             Statistics
+          </button>
+          <button
+            className={`tab ${activeTab === 'changelog' ? 'active' : ''}`}
+            onClick={() => setActiveTab('changelog')}
+          >
+            Changelog
           </button>
         </div>
 
@@ -1224,6 +1240,12 @@ function App() {
                 </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'changelog' && (
+            <div className="tab-content">
+              <Changelog />
             </div>
           )}
         </div>
