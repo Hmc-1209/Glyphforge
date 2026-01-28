@@ -1,5 +1,30 @@
 [
   {
+    "date": "2026-01-29",
+    "changes": [
+      {
+        "type": "feat",
+        "message": "Request form: Added separate Livestream Archive field (required) and Channel Link field (optional)"
+      },
+      {
+        "type": "feat",
+        "message": "Request cards: Always show field labels even when empty, expand icon always visible"
+      },
+      {
+        "type": "fix",
+        "message": "Collection lightbox: Added safe-area support for mobile notch and bottom navigation bar"
+      },
+      {
+        "type": "fix",
+        "message": "Collection lightbox: Fixed scrolling issue on mobile, images now properly resize to fit"
+      },
+      {
+        "type": "fix",
+        "message": "Request section: Limited to ~3 rows with internal scrolling, no longer fills all available space"
+      }
+    ]
+  },
+  {
     "date": "2026-01-28",
     "changes": [
       {

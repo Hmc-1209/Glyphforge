@@ -31,6 +31,7 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
   const [formData, setFormData] = useState({
     characterName: '',
     outfit: '',
+    livestreamArchive: '',
     channelLink: '',
     socialMediaLink: ''
   })
@@ -64,6 +65,7 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     setFormData({
       characterName: '',
       outfit: '',
+      livestreamArchive: '',
       channelLink: '',
       socialMediaLink: ''
     })
@@ -75,6 +77,7 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     setFormData({
       characterName: '',
       outfit: '',
+      livestreamArchive: '',
       channelLink: '',
       socialMediaLink: ''
     })
@@ -92,8 +95,8 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
       errors.outfit = 'Outfit name is required'
     }
 
-    if (!formData.channelLink.trim()) {
-      errors.channelLink = 'Channel link is required (livestream archive)'
+    if (!formData.livestreamArchive.trim()) {
+      errors.livestreamArchive = 'Livestream archive link is required'
     }
 
     setFormErrors(errors)
@@ -162,6 +165,7 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     setFormData({
       characterName: request.characterName,
       outfit: request.outfit,
+      livestreamArchive: request.livestreamArchive || '',
       channelLink: request.channelLink || '',
       socialMediaLink: request.socialMediaLink || ''
     })
@@ -175,6 +179,7 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     setFormData({
       characterName: '',
       outfit: '',
+      livestreamArchive: '',
       channelLink: '',
       socialMediaLink: ''
     })
@@ -420,6 +425,21 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
         {isExpanded && (
           <div className="request-card-details">
             <div className="request-field">
+              <strong>Archive:</strong>{' '}
+              {request.livestreamArchive ? (
+                <a
+                  href={request.livestreamArchive}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Link
+                </a>
+              ) : (
+                <span className="request-field-empty">-</span>
+              )}
+            </div>
+            <div className="request-field">
               <strong>Channel:</strong>{' '}
               {request.channelLink ? (
                 <a
@@ -662,20 +682,31 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
               </div>
 
               <div className="form-group">
-                <label htmlFor="channelLink">
-                  Channel Link (Livestream Archive) <span className="required">*</span>
+                <label htmlFor="livestreamArchive">
+                  Livestream Archive <span className="required">*</span>
                 </label>
+                <input
+                  type="url"
+                  id="livestreamArchive"
+                  value={formData.livestreamArchive}
+                  onChange={(e) => setFormData({ ...formData, livestreamArchive: e.target.value })}
+                  className={formErrors.livestreamArchive ? 'error' : ''}
+                  placeholder="https://..."
+                />
+                {formErrors.livestreamArchive && (
+                  <span className="error-message">{formErrors.livestreamArchive}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="channelLink">Channel Link</label>
                 <input
                   type="url"
                   id="channelLink"
                   value={formData.channelLink}
                   onChange={(e) => setFormData({ ...formData, channelLink: e.target.value })}
-                  className={formErrors.channelLink ? 'error' : ''}
                   placeholder="https://..."
                 />
-                {formErrors.channelLink && (
-                  <span className="error-message">{formErrors.channelLink}</span>
-                )}
               </div>
 
               <div className="form-group">
@@ -763,20 +794,31 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
               </div>
 
               <div className="form-group">
-                <label htmlFor="edit-channelLink">
-                  Channel Link (Livestream Archive) <span className="required">*</span>
+                <label htmlFor="edit-livestreamArchive">
+                  Livestream Archive <span className="required">*</span>
                 </label>
+                <input
+                  type="url"
+                  id="edit-livestreamArchive"
+                  value={formData.livestreamArchive}
+                  onChange={(e) => setFormData({ ...formData, livestreamArchive: e.target.value })}
+                  className={formErrors.livestreamArchive ? 'error' : ''}
+                  placeholder="https://..."
+                />
+                {formErrors.livestreamArchive && (
+                  <span className="error-message">{formErrors.livestreamArchive}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="edit-channelLink">Channel Link</label>
                 <input
                   type="url"
                   id="edit-channelLink"
                   value={formData.channelLink}
                   onChange={(e) => setFormData({ ...formData, channelLink: e.target.value })}
-                  className={formErrors.channelLink ? 'error' : ''}
                   placeholder="https://..."
                 />
-                {formErrors.channelLink && (
-                  <span className="error-message">{formErrors.channelLink}</span>
-                )}
               </div>
 
               <div className="form-group">

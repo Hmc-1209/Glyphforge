@@ -261,13 +261,18 @@
   overflow: hidden;
   box-shadow: none; /* Remove shadow for full screen effect */
   position: relative;
+  /* Safe area for notch/home indicator */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* Close Button */
 .gallery-viewer-close {
   position: absolute;
-  top: 1rem;
-  right: 1rem;
+  top: calc(1rem + env(safe-area-inset-top));
+  right: calc(1rem + env(safe-area-inset-right));
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -877,18 +882,42 @@
     width: 100vw;
     height: 100vh;
     border-radius: 0; /* No border radius on mobile */
+    padding-top: 2.5rem; /* Extra space for notch/status bar */
+    padding-bottom: 1.5rem; /* Extra space for bottom nav */
+    overflow: hidden; /* Prevent scrolling */
+  }
+
+  .gallery-viewer-close {
+    top: 3rem; /* Push down below notch */
+    right: 0.75rem;
   }
 
   .gallery-viewer-header {
     padding: 0.5rem;
+    flex-shrink: 0;
   }
 
   .gallery-viewer-header h2 {
     font-size: 1rem;
   }
 
+  .gallery-viewer-body {
+    flex: 1;
+    min-height: 0; /* Allow shrinking */
+    overflow: hidden;
+  }
+
   .gallery-viewer-image-container {
     padding: 0.25rem;
+    min-height: 0; /* Allow shrinking */
+  }
+
+  .gallery-viewer-image {
+    max-height: calc(100vh - 300px); /* Account for header, thumbnails, footer, and extra padding */
+  }
+
+  .gallery-viewer-image-container video {
+    max-height: calc(100vh - 300px);
   }
 
   .gallery-viewer-nav {
