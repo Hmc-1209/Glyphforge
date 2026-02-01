@@ -1665,10 +1665,14 @@ function App() {
                                 onDragEnd={handleCostumeDragEnd}
                                 onClick={() => adminMode ? handleEditCostume(item) : setSelectedCostume(item)}
                               >
-                                <div
-                                  className="prompt-thumbnail"
-                                  style={{ backgroundImage: `url(${item.thumbnail})` }}
-                                ></div>
+                                <div className="prompt-thumbnail">
+                                  <img 
+                                    src={item.thumbnail} 
+                                    alt={item.title || 'Costume'} 
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                </div>
                                 <div className="prompt-info">
                                   <h4>{item.title || ''}</h4>
                                   {adminMode && <span className="edit-indicator">✎ Edit</span>}

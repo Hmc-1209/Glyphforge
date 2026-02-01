@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken'
 import multer from 'multer'
 import dotenv from 'dotenv'
 import ffmpeg from 'fluent-ffmpeg'
+import sharp from 'sharp'
 
 dotenv.config()
 
@@ -708,78 +709,47 @@ app.put('/api/costumes/:id', authMiddleware, (req, res) => {
   }
 })
 
-// Configure multer for costume image uploads
-const costumeUploadFilenames = new Map()
-
-const costumeStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    if (!COSTUME_FOLDER_PATH) {
-      return cb(new Error('Costume folder not configured'), null)
-    }
-
-    const { id, imageIndex } = req.params
-    const uploadPath = path.join(COSTUME_FOLDER_PATH, id)
-
-    if (!fs.existsSync(uploadPath)) {
-      return cb(new Error('Costume folder not found'), null)
-    }
-
-    // Get existing images sorted
-    const existingFiles = fs.readdirSync(uploadPath)
-      .filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f))
-      .sort()
-    
-    const idx = parseInt(imageIndex)
-    const ext = path.extname(file.originalname).toLowerCase() || '.png'
-    
-    // Determine the filename for the new file
-    let newFilename
-    if (existingFiles[idx]) {
-      // Replace existing: use same base name with new extension
-      const oldBaseName = path.basename(existingFiles[idx], path.extname(existingFiles[idx]))
-      newFilename = `${oldBaseName}${ext}`
-      
-      // Delete the old file
-      const fileToDelete = path.join(uploadPath, existingFiles[idx])
-      console.log('Deleting existing costume file:', fileToDelete)
-      fs.unlinkSync(fileToDelete)
-    } else {
-      // New file: use 0-based naming (0.png, 1.png, ...)
-      newFilename = `${idx}${ext}`
-    }
-    
-    // Store filename for this request
-    costumeUploadFilenames.set(`${id}-${imageIndex}`, newFilename)
-    
-    cb(null, uploadPath)
-  },
-  filename: function (req, file, cb) {
-    const { id, imageIndex } = req.params
-    const key = `${id}-${imageIndex}`
-    const filename = costumeUploadFilenames.get(key) || `${parseInt(imageIndex) + 1}.png`
-    costumeUploadFilenames.delete(key)
-    cb(null, filename)
-  }
-})
-
+// Configure multer for costume image uploads - use temp directory first
 const costumeUpload = multer({
-  storage: costumeStorage,
+  storage: multer.memoryStorage(), // Store in memory for processing
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true)
     } else {
-      cb(new Error('Only JPEG, PNG, and WebP files are allowed'))
+      cb(new Error('Only JPEG, PNG, WebP, and GIF files are allowed'))
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 20 * 1024 * 1024 // 20MB limit for source images
   }
 })
 
-// API route - upload costume image (admin only)
-app.post('/api/costumes/:id/image/:imageIndex', authMiddleware, costumeUpload.single('image'), (req, res) => {
-  console.log('Upload costume image called:', { id: req.params.id, imageIndex: req.params.imageIndex, file: req.file?.filename })
+// Helper function to convert image to WebP
+async function convertToWebP(inputBuffer, outputPath, options = {}) {
+  const { quality = 85, maxWidth = 2048 } = options
+  
+  let transformer = sharp(inputBuffer)
+  
+  // Get metadata to check dimensions
+  const metadata = await transformer.metadata()
+  
+  // Resize if too large (maintain aspect ratio)
+  if (metadata.width > maxWidth) {
+    transformer = transformer.resize(maxWidth, null, { withoutEnlargement: true })
+  }
+  
+  // Convert to WebP with good quality
+  await transformer
+    .webp({ quality })
+    .toFile(outputPath)
+  
+  return outputPath
+}
+
+// API route - upload costume image (admin only) with WebP conversion
+app.post('/api/costumes/:id/image/:imageIndex', authMiddleware, costumeUpload.single('image'), async (req, res) => {
+  console.log('Upload costume image called:', { id: req.params.id, imageIndex: req.params.imageIndex, originalName: req.file?.originalname })
   
   if (!COSTUME_FOLDER_PATH) {
     return res.status(404).json({ error: 'Costume folder not configured' })
@@ -790,23 +760,52 @@ app.post('/api/costumes/:id/image/:imageIndex', authMiddleware, costumeUpload.si
       return res.status(400).json({ error: 'No image file provided' })
     }
 
-    const { id } = req.params
+    const { id, imageIndex } = req.params
     const folderPath = path.join(COSTUME_FOLDER_PATH, id)
+    const idx = parseInt(imageIndex)
 
-    // Get updated image list
+    if (!fs.existsSync(folderPath)) {
+      return res.status(404).json({ error: 'Costume folder not found' })
+    }
+
+    // Get existing images sorted
+    const existingFiles = fs.readdirSync(folderPath)
+      .filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f))
+      .sort()
+    
+    // Delete existing file at this index if exists
+    if (existingFiles[idx]) {
+      const fileToDelete = path.join(folderPath, existingFiles[idx])
+      console.log('Deleting existing costume file:', fileToDelete)
+      fs.unlinkSync(fileToDelete)
+    }
+
+    // Convert to WebP and save
+    const newFilename = `${idx}.webp`
+    const outputPath = path.join(folderPath, newFilename)
+    
+    await convertToWebP(req.file.buffer, outputPath, { quality: 85 })
+    console.log('Converted and saved costume image as WebP:', outputPath)
+
+    // Get updated image list with cache busters
     const files = fs.readdirSync(folderPath)
     const imageFiles = files.filter(file => /\.(png|jpg|jpeg|webp)$/i.test(file)).sort()
-    const images = imageFiles.map(file => `/${COSTUME_FOLDER_NAME}/${id}/${file}`)
+    const images = imageFiles.map(file => {
+      const filePath = path.join(folderPath, file)
+      const stats = fs.statSync(filePath)
+      const mtime = stats.mtimeMs.toString(36)
+      return `/${COSTUME_FOLDER_NAME}/${id}/${file}?v=${mtime}`
+    })
 
     res.json({
       success: true,
-      message: 'Image uploaded successfully',
-      filename: req.file.filename,
+      message: 'Image uploaded and converted to WebP successfully',
+      filename: newFilename,
       images: images
     })
   } catch (error) {
     console.error('Error uploading costume image:', error)
-    res.status(500).json({ error: 'Failed to upload image' })
+    res.status(500).json({ error: 'Failed to upload image: ' + error.message })
   }
 })
 
@@ -1183,98 +1182,76 @@ app.put('/api/prompts/:id', authMiddleware, (req, res) => {
   }
 })
 
-// Configure multer for prompt image uploads
-// Store the filename to use for the new upload
-const promptUploadFilenames = new Map()
-
-const promptStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const { id, imageIndex } = req.params
-    const uploadPath = path.join(PROMPT_FOLDER_PATH, id)
-
-    if (!fs.existsSync(uploadPath)) {
-      return cb(new Error('Prompt folder not found'), null)
-    }
-
-    // Get existing images sorted
-    const existingFiles = fs.readdirSync(uploadPath)
-      .filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f))
-      .sort()
-    
-    const idx = parseInt(imageIndex)
-    const ext = path.extname(file.originalname).toLowerCase() || '.png'
-    
-    // Determine the filename for the new file
-    let newFilename
-    if (existingFiles[idx]) {
-      // Replace existing: use same base name with new extension
-      const oldBaseName = path.basename(existingFiles[idx], path.extname(existingFiles[idx]))
-      newFilename = `${oldBaseName}${ext}`
-      
-      // Delete the old file
-      const fileToDelete = path.join(uploadPath, existingFiles[idx])
-      console.log('Deleting existing file:', fileToDelete)
-      fs.unlinkSync(fileToDelete)
-    } else {
-      // New file: use 0-based naming (0.png, 1.png, ...)
-      newFilename = `${idx}${ext}`
-    }
-    
-    // Store filename for this request
-    promptUploadFilenames.set(`${id}-${imageIndex}`, newFilename)
-    
-    cb(null, uploadPath)
-  },
-  filename: function (req, file, cb) {
-    const { id, imageIndex } = req.params
-    const key = `${id}-${imageIndex}`
-    const filename = promptUploadFilenames.get(key) || `${parseInt(imageIndex) + 1}.png`
-    promptUploadFilenames.delete(key)
-    cb(null, filename)
-  }
-})
-
+// Configure multer for prompt image uploads - use memory storage for WebP conversion
 const promptUpload = multer({
-  storage: promptStorage,
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true)
     } else {
-      cb(new Error('Only JPEG, PNG, and WebP files are allowed'))
+      cb(new Error('Only JPEG, PNG, WebP, and GIF files are allowed'))
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 20 * 1024 * 1024 // 20MB limit for source images
   }
 })
 
-// API route - upload prompt image (admin only)
-// imageIndex is passed as URL param to ensure it's available during multer processing
-app.post('/api/prompts/:id/image/:imageIndex', authMiddleware, promptUpload.single('image'), (req, res) => {
-  console.log('Upload image called:', { id: req.params.id, imageIndex: req.params.imageIndex, file: req.file?.filename })
+// API route - upload prompt image (admin only) with WebP conversion
+app.post('/api/prompts/:id/image/:imageIndex', authMiddleware, promptUpload.single('image'), async (req, res) => {
+  console.log('Upload prompt image called:', { id: req.params.id, imageIndex: req.params.imageIndex, originalName: req.file?.originalname })
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file provided' })
     }
 
-    const { id } = req.params
+    const { id, imageIndex } = req.params
     const folderPath = path.join(PROMPT_FOLDER_PATH, id)
+    const idx = parseInt(imageIndex)
 
-    // Get updated image list
+    if (!fs.existsSync(folderPath)) {
+      return res.status(404).json({ error: 'Prompt folder not found' })
+    }
+
+    // Get existing images sorted
+    const existingFiles = fs.readdirSync(folderPath)
+      .filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f))
+      .sort()
+    
+    // Delete existing file at this index if exists
+    if (existingFiles[idx]) {
+      const fileToDelete = path.join(folderPath, existingFiles[idx])
+      console.log('Deleting existing prompt file:', fileToDelete)
+      fs.unlinkSync(fileToDelete)
+    }
+
+    // Convert to WebP and save
+    const newFilename = `${idx}.webp`
+    const outputPath = path.join(folderPath, newFilename)
+    
+    await convertToWebP(req.file.buffer, outputPath, { quality: 85 })
+    console.log('Converted and saved prompt image as WebP:', outputPath)
+
+    // Get updated image list with cache busters
     const files = fs.readdirSync(folderPath)
     const imageFiles = files.filter(file => /\.(png|jpg|jpeg|webp)$/i.test(file)).sort()
-    const images = imageFiles.map(file => `/${PROMPT_FOLDER_NAME}/${id}/${file}`)
+    const images = imageFiles.map(file => {
+      const filePath = path.join(folderPath, file)
+      const stats = fs.statSync(filePath)
+      const mtime = stats.mtimeMs.toString(36)
+      return `/${PROMPT_FOLDER_NAME}/${id}/${file}?v=${mtime}`
+    })
 
     res.json({
       success: true,
-      message: 'Image uploaded successfully',
-      filename: req.file.filename,
+      message: 'Image uploaded and converted to WebP successfully',
+      filename: newFilename,
       images: images
     })
   } catch (error) {
     console.error('Error uploading prompt image:', error)
-    res.status(500).json({ error: 'Failed to upload image' })
+    res.status(500).json({ error: 'Failed to upload image: ' + error.message })
   }
 })
 
