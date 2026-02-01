@@ -3,26 +3,32 @@
     "date": "2026-02-01",
     "changes": [
       {
+        "hash": "9394eb8",
         "type": "feat",
         "message": "Added Costume tab - Browse and manage character costumes with categorized layout"
       },
       {
+        "hash": "9394eb8",
         "type": "feat",
         "message": "Costume admin features - Create, edit, delete costumes with drag-and-drop reordering"
       },
       {
+        "hash": "9394eb8",
         "type": "feat",
         "message": "Prompt admin features - Create, edit, delete prompts with image upload support"
       },
       {
+        "hash": "9394eb8",
         "type": "feat",
         "message": "Webhook notifications - New requests now send notifications to configured webhook"
       },
       {
+        "hash": "9394eb8",
         "type": "feat",
         "message": "VideoThumbnail component - Better video preview in Collection Gallery"
       },
       {
+        "hash": "9394eb8",
         "type": "fix",
         "message": "Improved image caching - Uses file modification time for cache busting"
       }
@@ -32,22 +38,27 @@
     "date": "2026-01-29",
     "changes": [
       {
+        "hash": "1b0ea61",
         "type": "feat",
         "message": "Request form: Added separate Livestream Archive field (required) and Channel Link field (optional)"
       },
       {
+        "hash": "1b0ea61",
         "type": "feat",
         "message": "Request cards: Always show field labels even when empty, expand icon always visible"
       },
       {
+        "hash": "1b0ea61",
         "type": "fix",
         "message": "Collection lightbox: Added safe-area support for mobile notch and bottom navigation bar"
       },
       {
+        "hash": "1b0ea61",
         "type": "fix",
         "message": "Collection lightbox: Fixed scrolling issue on mobile, images now properly resize to fit"
       },
       {
+        "hash": "1b0ea61",
         "type": "fix",
         "message": "Request section: Limited to ~3 rows with internal scrolling, no longer fills all available space"
       }
