@@ -550,17 +550,36 @@ function AlbumEditor({ type, album, onClose }) {
                   <ul>
                     {uploadedFiles.map((file, idx) => (
                       <li key={idx}>
-                        {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                        <span className="file-info">
+                          {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                        </span>
+                        <button
+                          type="button"
+                          className="file-remove-btn"
+                          onClick={() => setUploadedFiles(prev => prev.filter((_, i) => i !== idx))}
+                          title="Remove this file"
+                        >
+                          ×
+                        </button>
                       </li>
                     ))}
                   </ul>
-                  <button
-                    className="admin-btn admin-btn-primary"
-                    onClick={handleUpload}
-                    disabled={uploading || !formData.id}
-                  >
-                    {uploading ? 'Uploading...' : 'Upload Files'}
-                  </button>
+                  <div className="file-list-actions">
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-secondary"
+                      onClick={() => setUploadedFiles([])}
+                    >
+                      Clear All
+                    </button>
+                    <button
+                      className="admin-btn admin-btn-primary"
+                      onClick={handleUpload}
+                      disabled={uploading || !formData.id}
+                    >
+                      {uploading ? 'Uploading...' : 'Upload Files'}
+                    </button>
+                  </div>
                 </div>
               )}
 

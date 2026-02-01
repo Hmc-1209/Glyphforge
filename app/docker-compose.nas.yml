@@ -6,16 +6,20 @@ services:
     container_name: glyphforge-app
     ports:
       - "3001:3001"
-      - "40001:5173"
+      - "40001:3001"
     volumes:
       # Modify to your actual NAS path
       # Synology example: /volume1/docker/glyphforge-data:/datas
       # QNAP example: /share/Container/glyphforge-data:/datas
       # TrueNAS example: /mnt/tank/docker/glyphforge-data:/datas
       - /var/services/homes/dannyho/deployment_datas/Glyphforge:/datas
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # 資源限制（NAS kernel 4.4.302+ 不支援 CPU CFS scheduler，Docker 24.0.2 起會報錯，暫時停用）
     # deploy:
     #   resources:

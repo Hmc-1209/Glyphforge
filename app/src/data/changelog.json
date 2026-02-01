@@ -1,5 +1,34 @@
 [
   {
+    "date": "2026-02-01",
+    "changes": [
+      {
+        "type": "feat",
+        "message": "Added Costume tab - Browse and manage character costumes with categorized layout"
+      },
+      {
+        "type": "feat",
+        "message": "Costume admin features - Create, edit, delete costumes with drag-and-drop reordering"
+      },
+      {
+        "type": "feat",
+        "message": "Prompt admin features - Create, edit, delete prompts with image upload support"
+      },
+      {
+        "type": "feat",
+        "message": "Webhook notifications - New requests now send notifications to configured webhook"
+      },
+      {
+        "type": "feat",
+        "message": "VideoThumbnail component - Better video preview in Collection Gallery"
+      },
+      {
+        "type": "fix",
+        "message": "Improved image caching - Uses file modification time for cache busting"
+      }
+    ]
+  },
+  {
     "date": "2026-01-29",
     "changes": [
       {

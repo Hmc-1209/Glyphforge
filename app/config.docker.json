@@ -3,6 +3,10 @@
     "path": "/datas/prompt",
     "name": "prompt"
   },
+  "costumeFolder": {
+    "path": "/datas/costume",
+    "name": "costume"
+  },
   "loraFolder": {
     "path": "/datas/LoRA",
     "name": "LoRA"

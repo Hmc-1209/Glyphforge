@@ -22,6 +22,13 @@ const PROMPT_FOLDER_PATH = path.isAbsolute(config.promptFolder.path)
   : path.join(__dirname, config.promptFolder.path)
 const PROMPT_FOLDER_NAME = config.promptFolder.name
 
+const COSTUME_FOLDER_PATH = config.costumeFolder
+  ? (path.isAbsolute(config.costumeFolder.path)
+    ? config.costumeFolder.path
+    : path.join(__dirname, config.costumeFolder.path))
+  : null
+const COSTUME_FOLDER_NAME = config.costumeFolder?.name || 'costume'
+
 const LORA_FOLDER_PATH = path.isAbsolute(config.loraFolder.path)
   ? config.loraFolder.path
   : path.join(__dirname, config.loraFolder.path)
@@ -43,6 +50,65 @@ const PORT = 3001
 // Enable CORS
 app.use(cors())
 app.use(express.json())
+
+// Webhook configuration
+const WEBHOOK_ENABLED = process.env.WEBHOOK_ENABLED === 'true'
+const WEBHOOK_URL = process.env.WEBHOOK_URL
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET
+
+// Send webhook notification for new requests
+async function sendWebhookNotification(eventType, data) {
+  if (!WEBHOOK_ENABLED || !WEBHOOK_URL) {
+    return
+  }
+
+  try {
+    // Format message for Clawdbot
+    let message = ''
+    if (eventType === 'new_request') {
+      message = `🎨 GlyphForge 收到新的 Request！\n` +
+        `📝 類型: ${data.type}\n` +
+        `👤 角色: ${data.characterName || '未指定'}\n` +
+        `💬 備註: ${data.notes || '無'}\n` +
+        `🔗 ID: ${data.id}`
+    } else {
+      message = `GlyphForge Event: ${eventType}\n${JSON.stringify(data, null, 2)}`
+    }
+
+    // Use Clawdbot webhook format
+    const payload = {
+      message: message,
+      name: 'GlyphForge',
+      deliver: true,
+      channel: 'telegram'
+    }
+
+    const headers = {
+      'Content-Type': 'application/json'
+    }
+
+    if (WEBHOOK_SECRET) {
+      headers['Authorization'] = `Bearer ${WEBHOOK_SECRET}`
+    }
+
+    // Use /hooks/agent endpoint
+    const webhookUrl = WEBHOOK_URL.replace(/\/hooks\/?$/, '/hooks/agent')
+    
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      console.error(`Webhook notification failed: ${response.status} ${response.statusText}`)
+    } else {
+      console.log(`Webhook notification sent successfully for ${eventType}`)
+    }
+  } catch (error) {
+    console.error('Error sending webhook notification:', error.message)
+  }
+}
 
 // Serve static files from dist folder in production
 if (process.env.NODE_ENV === 'production') {
@@ -68,6 +134,9 @@ const galleryOptions = {
 
 // Static file service - serve images from configured folder with caching
 app.use(`/${PROMPT_FOLDER_NAME}`, express.static(PROMPT_FOLDER_PATH, staticOptions))
+if (COSTUME_FOLDER_PATH) {
+  app.use(`/${COSTUME_FOLDER_NAME}`, express.static(COSTUME_FOLDER_PATH, staticOptions))
+}
 app.use(`/${LORA_FOLDER_NAME}`, express.static(LORA_FOLDER_PATH, staticOptions))
 app.use(`/${GALLERY_FOLDER_NAME}`, express.static(GALLERY_FOLDER_PATH, galleryOptions))
 
@@ -126,18 +195,24 @@ app.get('/api/prompts', async (req, res) => {
           console.error(`Error reading image dimensions for ${firstImagePath}:`, error)
         }
 
-        // Add all available images (up to 2)
+        // Add all available images (up to 2) with their actual modification time as cache key
         imageFiles.slice(0, 2).forEach(file => {
-          images.push(`/${PROMPT_FOLDER_NAME}/${folder}/${file}`)
+          const filePath = path.join(folderPath, file)
+          const stats = fs.statSync(filePath)
+          const mtime = stats.mtimeMs.toString(36) // Use base36 for shorter string
+          images.push(`/${PROMPT_FOLDER_NAME}/${folder}/${file}?v=${mtime}`)
         })
       }
 
+      const imagesWithCacheBuster = images
+      
       return {
         id: folder,
-        thumbnail: images[0] || '',
-        images: images,
+        thumbnail: imagesWithCacheBuster[0] || '',
+        images: imagesWithCacheBuster,
         imageOrientation: imageOrientation,
         prompt: promptText,
+        title: meta.title || '',
         character: meta.character || 1,
         place: meta.place || 'Unknown',
         sensitive: meta.sensitive || 'Unknown',
@@ -154,6 +229,195 @@ app.get('/api/prompts', async (req, res) => {
   } catch (error) {
     console.error('Error reading prompts:', error)
     res.status(500).json({ error: 'Failed to load prompts' })
+  }
+})
+
+// API route - get all costume data
+app.get('/api/costumes', async (req, res) => {
+  if (!COSTUME_FOLDER_PATH) {
+    return res.json([])
+  }
+  
+  try {
+    const folders = fs.readdirSync(COSTUME_FOLDER_PATH).filter(file => {
+      return fs.statSync(path.join(COSTUME_FOLDER_PATH, file)).isDirectory()
+    })
+
+    const costumes = folders.map(folder => {
+      const folderPath = path.join(COSTUME_FOLDER_PATH, folder)
+      const promptPath = path.join(folderPath, 'prompt.txt')
+      const metaPath = path.join(folderPath, 'meta.json')
+
+      let promptText = ''
+      if (fs.existsSync(promptPath)) {
+        promptText = fs.readFileSync(promptPath, 'utf-8')
+      }
+
+      // Read meta.json if exists
+      let meta = {
+        character: 1,
+        place: 'Unknown',
+        sensitive: 'Unknown',
+        type: 'Costume',
+        view: 'Unknown',
+        nudity: 'Unknown',
+        stability: null,
+        author: null
+      }
+      if (fs.existsSync(metaPath)) {
+        try {
+          const metaData = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          meta = { ...meta, ...metaData }
+        } catch (error) {
+          console.error(`Error reading meta.json for costume ${folder}:`, error)
+        }
+      }
+
+      // Scan all images in the folder
+      const files = fs.readdirSync(folderPath)
+      const imageFiles = files.filter(file => /\.(png|jpg|jpeg|webp)$/i.test(file))
+        .sort()
+
+      const images = []
+      let imageOrientation = 'unknown'
+
+      // Detect image orientation from first image
+      if (imageFiles.length > 0) {
+        const firstImagePath = path.join(folderPath, imageFiles[0])
+        try {
+          const dimensions = sizeOf(firstImagePath)
+          imageOrientation = dimensions.width > dimensions.height ? 'landscape' : 'portrait'
+        } catch (error) {
+          console.error(`Error reading image dimensions for ${firstImagePath}:`, error)
+        }
+
+        // Add all available images (up to 2) with their actual modification time as cache key
+        imageFiles.slice(0, 2).forEach(file => {
+          const filePath = path.join(folderPath, file)
+          const stats = fs.statSync(filePath)
+          const mtime = stats.mtimeMs.toString(36) // Use base36 for shorter string
+          images.push(`/${COSTUME_FOLDER_NAME}/${folder}/${file}?v=${mtime}`)
+        })
+      }
+
+      const imagesWithCacheBuster = images
+      
+      return {
+        id: folder,
+        thumbnail: imagesWithCacheBuster[0] || '',
+        images: imagesWithCacheBuster,
+        imageOrientation: imageOrientation,
+        prompt: promptText,
+        title: meta.title || '',
+        character: meta.character || 1,
+        place: meta.place || 'Unknown',
+        sensitive: meta.sensitive || 'Unknown',
+        type: meta.type || 'Costume',
+        view: meta.view || 'Unknown',
+        nudity: meta.nudity || 'Unknown',
+        stability: meta.stability || null,
+        author: meta.author || 'dANNY',
+        copyCount: meta.copyCount || 0
+      }
+    })
+
+    // Load or create metadata
+    const metadataPath = path.join(COSTUME_FOLDER_PATH, 'metadata.json')
+    let metadata = { typeOrder: [], costumeOrder: {} }
+    
+    if (fs.existsSync(metadataPath)) {
+      try {
+        metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'))
+      } catch (error) {
+        console.error('Error reading costume metadata:', error)
+      }
+    }
+
+    // Get all unique types from costumes
+    const allTypes = [...new Set(costumes.map(c => c.type).filter(t => t && t !== 'Unknown'))]
+    
+    // Check for new types and add them to typeOrder
+    let metadataChanged = false
+    allTypes.forEach(type => {
+      if (!metadata.typeOrder.includes(type)) {
+        metadata.typeOrder.push(type)
+        metadataChanged = true
+      }
+    })
+    
+    // Remove types that no longer exist
+    metadata.typeOrder = metadata.typeOrder.filter(type => allTypes.includes(type))
+    
+    // Initialize costumeOrder for new types and update existing ones
+    allTypes.forEach(type => {
+      const typeCostumes = costumes.filter(c => c.type === type).map(c => c.id)
+      if (!metadata.costumeOrder[type]) {
+        metadata.costumeOrder[type] = typeCostumes
+        metadataChanged = true
+      } else {
+        // Add any new costumes to the end
+        typeCostumes.forEach(id => {
+          if (!metadata.costumeOrder[type].includes(id)) {
+            metadata.costumeOrder[type].push(id)
+            metadataChanged = true
+          }
+        })
+        // Remove costumes that no longer exist or changed type
+        metadata.costumeOrder[type] = metadata.costumeOrder[type].filter(id => typeCostumes.includes(id))
+      }
+    })
+    
+    // Remove costumeOrder entries for types that no longer exist
+    Object.keys(metadata.costumeOrder).forEach(type => {
+      if (!allTypes.includes(type)) {
+        delete metadata.costumeOrder[type]
+        metadataChanged = true
+      }
+    })
+    
+    // Save metadata if changed
+    if (metadataChanged) {
+      fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2))
+    }
+
+    res.json({ costumes, metadata })
+  } catch (error) {
+    console.error('Error reading costumes:', error)
+    res.status(500).json({ error: 'Failed to load costumes' })
+  }
+})
+
+// API route - update costume metadata (type order and costume order)
+app.put('/api/costumes/metadata', authMiddleware, (req, res) => {
+  if (!COSTUME_FOLDER_PATH) {
+    return res.status(404).json({ error: 'Costume folder not configured' })
+  }
+
+  try {
+    const { typeOrder, costumeOrder } = req.body
+    const metadataPath = path.join(COSTUME_FOLDER_PATH, 'metadata.json')
+    
+    let metadata = { typeOrder: [], costumeOrder: {} }
+    if (fs.existsSync(metadataPath)) {
+      try {
+        metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'))
+      } catch (error) {
+        console.error('Error reading costume metadata:', error)
+      }
+    }
+    
+    if (typeOrder !== undefined) {
+      metadata.typeOrder = typeOrder
+    }
+    if (costumeOrder !== undefined) {
+      metadata.costumeOrder = { ...metadata.costumeOrder, ...costumeOrder }
+    }
+    
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2))
+    res.json({ success: true, metadata })
+  } catch (error) {
+    console.error('Error updating costume metadata:', error)
+    res.status(500).json({ error: 'Failed to update metadata' })
   }
 })
 
@@ -265,11 +529,15 @@ app.get('/api/loras', async (req, res) => {
       // For backward compatibility, use first file as default
       const defaultVersion = versions[0] || { name: '', displayName: '', fileName: '', filePath: '' }
 
+      // Get modification times for cache busting
+      const thumbnailMtime = fs.existsSync(thumbnailPath) ? fs.statSync(thumbnailPath).mtimeMs.toString(36) : ''
+      const previewMtime = fs.existsSync(previewPath) ? fs.statSync(previewPath).mtimeMs.toString(36) : ''
+
       return {
         id: folder,
         name: displayName,
-        thumbnail: fs.existsSync(thumbnailPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/0.png` : '',
-        preview: fs.existsSync(previewPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/1.png` : '',
+        thumbnail: fs.existsSync(thumbnailPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/0.png?v=${thumbnailMtime}` : '',
+        preview: fs.existsSync(previewPath) ? `/${LORA_FOLDER_NAME}/character/${folder}/1.png?v=${previewMtime}` : '',
         link: meta.link || '',
         prompt: meta.prompt || '',
         // Legacy fields for backward compatibility
@@ -314,6 +582,231 @@ app.post('/api/prompts/:id/copy', (req, res) => {
   } catch (error) {
     console.error('Error updating prompt copy count:', error)
     res.status(500).json({ error: 'Failed to update copy count' })
+  }
+})
+
+// API route - increment costume copy count
+app.post('/api/costumes/:id/copy', (req, res) => {
+  if (!COSTUME_FOLDER_PATH) {
+    return res.status(404).json({ error: 'Costume folder not configured' })
+  }
+  
+  try {
+    const { id } = req.params
+    const metaPath = path.join(COSTUME_FOLDER_PATH, id, 'meta.json')
+
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+      meta.copyCount = (meta.copyCount || 0) + 1
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      res.json({ success: true, copyCount: meta.copyCount })
+    } else {
+      res.status(404).json({ error: 'Meta file not found' })
+    }
+  } catch (error) {
+    console.error('Error updating costume copy count:', error)
+    res.status(500).json({ error: 'Failed to update copy count' })
+  }
+})
+
+// API route - create new costume (admin only)
+app.post('/api/costumes', authMiddleware, (req, res) => {
+  if (!COSTUME_FOLDER_PATH) {
+    return res.status(404).json({ error: 'Costume folder not configured' })
+  }
+
+  try {
+    const { title, prompt, character, place, sensitive, type, view, nudity, stability, author } = req.body
+
+    // Find next available ID (folder name)
+    const existingFolders = fs.readdirSync(COSTUME_FOLDER_PATH)
+      .filter(file => fs.statSync(path.join(COSTUME_FOLDER_PATH, file)).isDirectory())
+      .map(f => parseInt(f))
+      .filter(n => !isNaN(n))
+      .sort((a, b) => a - b)
+
+    const nextId = existingFolders.length > 0 ? Math.max(...existingFolders) + 1 : 0
+    const newFolderPath = path.join(COSTUME_FOLDER_PATH, nextId.toString())
+
+    // Create folder
+    fs.mkdirSync(newFolderPath, { recursive: true })
+
+    // Create prompt.txt
+    fs.writeFileSync(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
+
+    // Create meta.json
+    const meta = {
+      title: title || '',
+      character: character || 1,
+      place: place || 'Unknown',
+      sensitive: sensitive || 'SFW',
+      type: type || 'Costume',
+      view: view || 'Unknown',
+      nudity: nudity || 'Unknown',
+      stability: stability || 1,
+      author: author || 'dANNY',
+      copyCount: 0
+    }
+    fs.writeFileSync(path.join(newFolderPath, 'meta.json'), JSON.stringify(meta, null, 2))
+
+    res.json({
+      success: true,
+      message: 'Costume created successfully',
+      id: nextId.toString()
+    })
+  } catch (error) {
+    console.error('Error creating costume:', error)
+    res.status(500).json({ error: 'Failed to create costume' })
+  }
+})
+
+// API route - update costume (admin only)
+app.put('/api/costumes/:id', authMiddleware, (req, res) => {
+  if (!COSTUME_FOLDER_PATH) {
+    return res.status(404).json({ error: 'Costume folder not configured' })
+  }
+
+  try {
+    const { id } = req.params
+    const { title, prompt, character, place, sensitive, type, view, nudity, stability, author } = req.body
+    const folderPath = path.join(COSTUME_FOLDER_PATH, id)
+    const metaPath = path.join(folderPath, 'meta.json')
+    const promptPath = path.join(folderPath, 'prompt.txt')
+
+    if (!fs.existsSync(folderPath)) {
+      return res.status(404).json({ error: 'Costume folder not found' })
+    }
+
+    // Update prompt.txt
+    if (prompt !== undefined) {
+      fs.writeFileSync(promptPath, prompt, 'utf-8')
+    }
+
+    // Update meta.json
+    let meta = {}
+    if (fs.existsSync(metaPath)) {
+      meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+    }
+
+    // Update meta fields if provided
+    if (title !== undefined) meta.title = title
+    if (character !== undefined) meta.character = character
+    if (place !== undefined) meta.place = place
+    if (sensitive !== undefined) meta.sensitive = sensitive
+    if (type !== undefined) meta.type = type
+    if (view !== undefined) meta.view = view
+    if (nudity !== undefined) meta.nudity = nudity
+    if (stability !== undefined) meta.stability = stability
+    if (author !== undefined) meta.author = author
+
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+
+    res.json({ success: true, message: 'Costume updated successfully' })
+  } catch (error) {
+    console.error('Error updating costume:', error)
+    res.status(500).json({ error: 'Failed to update costume' })
+  }
+})
+
+// Configure multer for costume image uploads
+const costumeUploadFilenames = new Map()
+
+const costumeStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    if (!COSTUME_FOLDER_PATH) {
+      return cb(new Error('Costume folder not configured'), null)
+    }
+
+    const { id, imageIndex } = req.params
+    const uploadPath = path.join(COSTUME_FOLDER_PATH, id)
+
+    if (!fs.existsSync(uploadPath)) {
+      return cb(new Error('Costume folder not found'), null)
+    }
+
+    // Get existing images sorted
+    const existingFiles = fs.readdirSync(uploadPath)
+      .filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f))
+      .sort()
+    
+    const idx = parseInt(imageIndex)
+    const ext = path.extname(file.originalname).toLowerCase() || '.png'
+    
+    // Determine the filename for the new file
+    let newFilename
+    if (existingFiles[idx]) {
+      // Replace existing: use same base name with new extension
+      const oldBaseName = path.basename(existingFiles[idx], path.extname(existingFiles[idx]))
+      newFilename = `${oldBaseName}${ext}`
+      
+      // Delete the old file
+      const fileToDelete = path.join(uploadPath, existingFiles[idx])
+      console.log('Deleting existing costume file:', fileToDelete)
+      fs.unlinkSync(fileToDelete)
+    } else {
+      // New file: use 0-based naming (0.png, 1.png, ...)
+      newFilename = `${idx}${ext}`
+    }
+    
+    // Store filename for this request
+    costumeUploadFilenames.set(`${id}-${imageIndex}`, newFilename)
+    
+    cb(null, uploadPath)
+  },
+  filename: function (req, file, cb) {
+    const { id, imageIndex } = req.params
+    const key = `${id}-${imageIndex}`
+    const filename = costumeUploadFilenames.get(key) || `${parseInt(imageIndex) + 1}.png`
+    costumeUploadFilenames.delete(key)
+    cb(null, filename)
+  }
+})
+
+const costumeUpload = multer({
+  storage: costumeStorage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only JPEG, PNG, and WebP files are allowed'))
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+})
+
+// API route - upload costume image (admin only)
+app.post('/api/costumes/:id/image/:imageIndex', authMiddleware, costumeUpload.single('image'), (req, res) => {
+  console.log('Upload costume image called:', { id: req.params.id, imageIndex: req.params.imageIndex, file: req.file?.filename })
+  
+  if (!COSTUME_FOLDER_PATH) {
+    return res.status(404).json({ error: 'Costume folder not configured' })
+  }
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' })
+    }
+
+    const { id } = req.params
+    const folderPath = path.join(COSTUME_FOLDER_PATH, id)
+
+    // Get updated image list
+    const files = fs.readdirSync(folderPath)
+    const imageFiles = files.filter(file => /\.(png|jpg|jpeg|webp)$/i.test(file)).sort()
+    const images = imageFiles.map(file => `/${COSTUME_FOLDER_NAME}/${id}/${file}`)
+
+    res.json({
+      success: true,
+      message: 'Image uploaded successfully',
+      filename: req.file.filename,
+      images: images
+    })
+  } catch (error) {
+    console.error('Error uploading costume image:', error)
+    res.status(500).json({ error: 'Failed to upload image' })
   }
 })
 
@@ -554,6 +1047,240 @@ app.post('/api/gallery/admin/login', async (req, res) => {
     res.status(500).json({ error: 'Login failed' })
   }
 })
+
+// ===============================================
+// PROMPT ADMIN APIs
+// ===============================================
+
+// API route - create new prompt (admin only)
+app.post('/api/prompts', authMiddleware, (req, res) => {
+  try {
+    const { title, prompt, character, place, sensitive, type, view, nudity, stability, author } = req.body
+
+    // Find next available ID (folder name)
+    const existingFolders = fs.readdirSync(PROMPT_FOLDER_PATH)
+      .filter(file => fs.statSync(path.join(PROMPT_FOLDER_PATH, file)).isDirectory())
+      .map(f => parseInt(f))
+      .filter(n => !isNaN(n))
+      .sort((a, b) => a - b)
+
+    const nextId = existingFolders.length > 0 ? Math.max(...existingFolders) + 1 : 0
+    const newFolderPath = path.join(PROMPT_FOLDER_PATH, nextId.toString())
+
+    // Create folder
+    fs.mkdirSync(newFolderPath, { recursive: true })
+
+    // Create prompt.txt
+    fs.writeFileSync(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
+
+    // Create meta.json
+    const meta = {
+      title: title || '',
+      character: character || 1,
+      place: place || 'Unknown',
+      sensitive: sensitive || 'SFW',
+      type: type || 'Unknown',
+      view: view || 'Unknown',
+      nudity: nudity || 'Unknown',
+      stability: stability || 1,
+      author: author || 'dANNY',
+      copyCount: 0
+    }
+    fs.writeFileSync(path.join(newFolderPath, 'meta.json'), JSON.stringify(meta, null, 2))
+
+    // Create placeholder images (1.png will be required to upload)
+    res.json({
+      success: true,
+      message: 'Prompt created successfully',
+      id: nextId.toString()
+    })
+  } catch (error) {
+    console.error('Error creating prompt:', error)
+    res.status(500).json({ error: 'Failed to create prompt' })
+  }
+})
+
+// API route - get unique field values for prompts
+app.get('/api/prompts/fields', (req, res) => {
+  try {
+    const folders = fs.readdirSync(PROMPT_FOLDER_PATH).filter(file => {
+      return fs.statSync(path.join(PROMPT_FOLDER_PATH, file)).isDirectory()
+    })
+
+    const fields = {
+      place: new Set(),
+      type: new Set(),
+      view: new Set(),
+      nudity: new Set()
+    }
+
+    folders.forEach(folder => {
+      const metaPath = path.join(PROMPT_FOLDER_PATH, folder, 'meta.json')
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          if (meta.place && meta.place !== 'Unknown') fields.place.add(meta.place)
+          if (meta.type && meta.type !== 'Unknown') fields.type.add(meta.type)
+          if (meta.view && meta.view !== 'Unknown') fields.view.add(meta.view)
+          if (meta.nudity && meta.nudity !== 'Unknown') fields.nudity.add(meta.nudity)
+        } catch (e) {}
+      }
+    })
+
+    res.json({
+      place: Array.from(fields.place).sort(),
+      type: Array.from(fields.type).sort(),
+      view: Array.from(fields.view).sort(),
+      nudity: Array.from(fields.nudity).sort()
+    })
+  } catch (error) {
+    console.error('Error getting prompt fields:', error)
+    res.status(500).json({ error: 'Failed to get fields' })
+  }
+})
+
+// API route - update prompt (admin only)
+app.put('/api/prompts/:id', authMiddleware, (req, res) => {
+  try {
+    const { id } = req.params
+    const { title, prompt, character, place, sensitive, type, view, nudity, stability, author } = req.body
+    const folderPath = path.join(PROMPT_FOLDER_PATH, id)
+    const metaPath = path.join(folderPath, 'meta.json')
+    const promptPath = path.join(folderPath, 'prompt.txt')
+
+    if (!fs.existsSync(folderPath)) {
+      return res.status(404).json({ error: 'Prompt folder not found' })
+    }
+
+    // Update prompt.txt
+    if (prompt !== undefined) {
+      fs.writeFileSync(promptPath, prompt, 'utf-8')
+    }
+
+    // Update meta.json
+    let meta = {}
+    if (fs.existsSync(metaPath)) {
+      meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+    }
+
+    // Update meta fields if provided
+    if (title !== undefined) meta.title = title
+    if (character !== undefined) meta.character = character
+    if (place !== undefined) meta.place = place
+    if (sensitive !== undefined) meta.sensitive = sensitive
+    if (type !== undefined) meta.type = type
+    if (view !== undefined) meta.view = view
+    if (nudity !== undefined) meta.nudity = nudity
+    if (stability !== undefined) meta.stability = stability
+    if (author !== undefined) meta.author = author
+
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+
+    res.json({ success: true, message: 'Prompt updated successfully' })
+  } catch (error) {
+    console.error('Error updating prompt:', error)
+    res.status(500).json({ error: 'Failed to update prompt' })
+  }
+})
+
+// Configure multer for prompt image uploads
+// Store the filename to use for the new upload
+const promptUploadFilenames = new Map()
+
+const promptStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const { id, imageIndex } = req.params
+    const uploadPath = path.join(PROMPT_FOLDER_PATH, id)
+
+    if (!fs.existsSync(uploadPath)) {
+      return cb(new Error('Prompt folder not found'), null)
+    }
+
+    // Get existing images sorted
+    const existingFiles = fs.readdirSync(uploadPath)
+      .filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f))
+      .sort()
+    
+    const idx = parseInt(imageIndex)
+    const ext = path.extname(file.originalname).toLowerCase() || '.png'
+    
+    // Determine the filename for the new file
+    let newFilename
+    if (existingFiles[idx]) {
+      // Replace existing: use same base name with new extension
+      const oldBaseName = path.basename(existingFiles[idx], path.extname(existingFiles[idx]))
+      newFilename = `${oldBaseName}${ext}`
+      
+      // Delete the old file
+      const fileToDelete = path.join(uploadPath, existingFiles[idx])
+      console.log('Deleting existing file:', fileToDelete)
+      fs.unlinkSync(fileToDelete)
+    } else {
+      // New file: use 0-based naming (0.png, 1.png, ...)
+      newFilename = `${idx}${ext}`
+    }
+    
+    // Store filename for this request
+    promptUploadFilenames.set(`${id}-${imageIndex}`, newFilename)
+    
+    cb(null, uploadPath)
+  },
+  filename: function (req, file, cb) {
+    const { id, imageIndex } = req.params
+    const key = `${id}-${imageIndex}`
+    const filename = promptUploadFilenames.get(key) || `${parseInt(imageIndex) + 1}.png`
+    promptUploadFilenames.delete(key)
+    cb(null, filename)
+  }
+})
+
+const promptUpload = multer({
+  storage: promptStorage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only JPEG, PNG, and WebP files are allowed'))
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+})
+
+// API route - upload prompt image (admin only)
+// imageIndex is passed as URL param to ensure it's available during multer processing
+app.post('/api/prompts/:id/image/:imageIndex', authMiddleware, promptUpload.single('image'), (req, res) => {
+  console.log('Upload image called:', { id: req.params.id, imageIndex: req.params.imageIndex, file: req.file?.filename })
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' })
+    }
+
+    const { id } = req.params
+    const folderPath = path.join(PROMPT_FOLDER_PATH, id)
+
+    // Get updated image list
+    const files = fs.readdirSync(folderPath)
+    const imageFiles = files.filter(file => /\.(png|jpg|jpeg|webp)$/i.test(file)).sort()
+    const images = imageFiles.map(file => `/${PROMPT_FOLDER_NAME}/${id}/${file}`)
+
+    res.json({
+      success: true,
+      message: 'Image uploaded successfully',
+      filename: req.file.filename,
+      images: images
+    })
+  } catch (error) {
+    console.error('Error uploading prompt image:', error)
+    res.status(500).json({ error: 'Failed to upload image' })
+  }
+})
+
+// ===============================================
+// GALLERY UPLOAD CONFIGURATION
+// ===============================================
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -1314,6 +2041,9 @@ app.post('/api/requests', (req, res) => {
     // Write meta.json
     const metaPath = path.join(requestPath, 'meta.json')
     fs.writeFileSync(metaPath, JSON.stringify(newRequest, null, 2))
+
+    // Send webhook notification for new request
+    sendWebhookNotification('new_request', newRequest)
 
     res.status(201).json(newRequest)
   } catch (error) {

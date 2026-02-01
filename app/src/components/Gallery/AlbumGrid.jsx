@@ -1,4 +1,5 @@
 import React from 'react'
+import VideoThumbnail from './VideoThumbnail'
 
 function AlbumGrid({ albums, onAlbumClick, type }) {
   // Helper function to check if file is a video
@@ -26,14 +27,7 @@ function AlbumGrid({ albums, onAlbumClick, type }) {
           <div className="gallery-card-image">
             {album.cover ? (
               isVideo(album.cover) ? (
-                <video
-                  src={album.cover}
-                  alt={album.title}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  loading="lazy"
-                />
+                <VideoThumbnail src={album.cover} alt={album.title} />
               ) : (
                 <img src={album.cover} alt={album.title} loading="lazy" />
               )

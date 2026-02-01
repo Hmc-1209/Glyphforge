@@ -42,6 +42,13 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     localStorage.setItem('request-collapsed-categories', JSON.stringify([...collapsedCategories]))
   }, [collapsedCategories])
 
+  // Clear expanded cards when entering admin mode (logged-in users)
+  useEffect(() => {
+    if (adminMode && isLoggedIn) {
+      setExpandedCards(new Set())
+    }
+  }, [adminMode, isLoggedIn])
+
   // Load requests on mount
   useEffect(() => {
     loadRequests()
@@ -503,24 +510,6 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
               >
                 🗑
               </button>
-              <div className="order-buttons">
-                <button
-                  className="admin-button move-button"
-                  onClick={() => handleMoveUp(index)}
-                  disabled={index === 0}
-                  title="Move up"
-                >
-                  ▲
-                </button>
-                <button
-                  className="admin-button move-button"
-                  onClick={() => handleMoveDown(index)}
-                  disabled={index === requests.length - 1}
-                  title="Move down"
-                >
-                  ▼
-                </button>
-              </div>
             </div>
           </div>
         )}

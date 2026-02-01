@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import Gallery from './components/Gallery/Gallery'
 import Request from './components/Request/Request'
 import Changelog from './components/Changelog/Changelog'
+import AdminLogin from './components/Gallery/Admin/AdminLogin'
 import { useDataCache } from './hooks/useDataCache'
 import { ToastProvider } from './components/Toast/ToastContext'
 
@@ -14,6 +15,7 @@ function App() {
   })
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [selectedPrompt, setSelectedPrompt] = useState(null)
+  const [selectedCostume, setSelectedCostume] = useState(null)
   const [selectedLora, setSelectedLora] = useState(null)
   const [selectedLoraVersion, setSelectedLoraVersion] = useState(null)
   const [isVersionDropdownOpen, setIsVersionDropdownOpen] = useState(false)
@@ -44,6 +46,42 @@ function App() {
 
   // Help modal
   const [showHelpModal, setShowHelpModal] = useState(false)
+
+  // Prompt edit mode
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false)
+  const [isCreatingPrompt, setIsCreatingPrompt] = useState(false)
+  const [editPromptData, setEditPromptData] = useState(null)
+
+  // Costume edit mode
+  const [isEditingCostume, setIsEditingCostume] = useState(false)
+  const [isCreatingCostume, setIsCreatingCostume] = useState(false)
+  const [editCostumeData, setEditCostumeData] = useState(null)
+  const [pendingCostumeImages, setPendingCostumeImages] = useState([null, null])
+
+  // Costume category state
+  const [collapsedCostumeTypes, setCollapsedCostumeTypes] = useState(() => {
+    try {
+      const saved = localStorage.getItem('costume-collapsed-types')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
+  const [draggingCostumeType, setDraggingCostumeType] = useState(null)
+  const [draggingCostume, setDraggingCostume] = useState(null)
+  const [draggingCostumeFromType, setDraggingCostumeFromType] = useState(null)
+  const costumeImageInputRef = useRef(null)
+  const [uploadingCostumeImageIndex, setUploadingCostumeImageIndex] = useState(null)
+  const [showPromptLogin, setShowPromptLogin] = useState(false)
+  const imageInputRef = useRef(null)
+  const [uploadingImageIndex, setUploadingImageIndex] = useState(null)
+  const [pendingImages, setPendingImages] = useState([null, null]) // Store File objects for upload
+  const [promptFieldOptions, setPromptFieldOptions] = useState({
+    place: [],
+    type: [],
+    view: [],
+    nudity: []
+  })
 
   // Scroll to top button visibility
   const [showScrollTop, setShowScrollTop] = useState(false)
@@ -77,7 +115,7 @@ function App() {
         return []
       }
     }
-  })
+  }, { revalidateOnMount: true })
 
   const lorasCache = useDataCache('loras', async () => {
     try {
@@ -89,8 +127,27 @@ function App() {
     }
   })
 
+  const costumesCache = useDataCache('costumes', async () => {
+    try {
+      const response = await fetch('/api/costumes')
+      const data = await response.json()
+      // New API returns { costumes, metadata }
+      if (data.costumes && data.metadata) {
+        return data
+      }
+      // Fallback for old API format
+      return { costumes: data, metadata: { typeOrder: [], costumeOrder: {} } }
+    } catch (error) {
+      console.error('Failed to load costumes:', error)
+      return { costumes: [], metadata: { typeOrder: [], costumeOrder: {} } }
+    }
+  })
+
   const prompts = promptsCache.data || []
   const loras = lorasCache.data || []
+  const costumesData = costumesCache.data || { costumes: [], metadata: { typeOrder: [], costumeOrder: {} } }
+  const costumes = costumesData.costumes || []
+  const costumeMetadata = costumesData.metadata || { typeOrder: [], costumeOrder: {} }
 
   // Save sensitivity filter to localStorage whenever it changes
   useEffect(() => {
@@ -101,6 +158,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab)
   }, [activeTab])
+
+  // Save costume collapsed types to localStorage
+  useEffect(() => {
+    localStorage.setItem('costume-collapsed-types', JSON.stringify([...collapsedCostumeTypes]))
+  }, [collapsedCostumeTypes])
 
   useEffect(() => {
     const loadStatistics = async () => {
@@ -122,8 +184,17 @@ function App() {
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
+        if (isEditingPrompt) {
+          handleCloseEditPrompt()
+        }
+        if (isEditingCostume) {
+          handleCloseEditCostume()
+        }
         if (selectedPrompt) {
           setSelectedPrompt(null)
+        }
+        if (selectedCostume) {
+          setSelectedCostume(null)
         }
         if (selectedLora) {
           setSelectedLora(null)
@@ -134,7 +205,7 @@ function App() {
 
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [selectedPrompt, selectedLora])
+  }, [selectedPrompt, selectedCostume, selectedLora, isEditingPrompt, isEditingCostume])
 
   // Handle scroll to show/hide scroll-to-top button
   useEffect(() => {
@@ -150,6 +221,31 @@ function App() {
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  // Load prompt field options for dynamic dropdowns
+  useEffect(() => {
+    const loadFieldOptions = async () => {
+      try {
+        const response = await fetch('/api/prompts/fields')
+        const data = await response.json()
+        console.log('Loaded field options:', data) // Debug
+        setPromptFieldOptions(data)
+      } catch (error) {
+        console.error('Failed to load prompt field options:', error)
+      }
+    }
+    loadFieldOptions()
+  }, []) // Load on mount
+
+  // Reload field options when prompts change
+  useEffect(() => {
+    if (prompts && prompts.length > 0) {
+      fetch('/api/prompts/fields')
+        .then(res => res.json())
+        .then(data => setPromptFieldOptions(data))
+        .catch(err => console.error('Failed to reload field options:', err))
+    }
+  }, [prompts])
 
   // Initialize selected version when LoRA is selected
   useEffect(() => {
@@ -171,7 +267,14 @@ function App() {
 
       // Increment copy counter
       if (itemId && itemType) {
-        const endpoint = itemType === 'prompt' ? `/api/prompts/${itemId}/copy` : `/api/loras/${itemId}/copy`
+        let endpoint
+        if (itemType === 'prompt') {
+          endpoint = `/api/prompts/${itemId}/copy`
+        } else if (itemType === 'costume') {
+          endpoint = `/api/costumes/${itemId}/copy`
+        } else {
+          endpoint = `/api/loras/${itemId}/copy`
+        }
         await fetch(endpoint, { method: 'POST' })
       }
     } catch (error) {
@@ -214,14 +317,598 @@ function App() {
     }
   }
 
+  // Prompt admin handlers
+  const handlePromptAdminClick = () => {
+    if (isLoggedIn) {
+      onPromptAdminModeToggle()
+    } else {
+      setShowPromptLogin(true)
+    }
+  }
+
+  const onPromptAdminModeToggle = () => {
+    if (isLoggedIn) {
+      setAdminMode(!adminMode)
+    }
+  }
+
+  const handlePromptLoginSuccess = (token) => {
+    setIsLoggedIn(true)
+    setAdminMode(true)
+    setShowPromptLogin(false)
+  }
+
+  const handleEditPrompt = (prompt) => {
+    setEditPromptData({
+      ...prompt,
+      editedTitle: prompt.title || '',
+      editedPrompt: prompt.prompt,
+      editedCharacter: prompt.character || 1,
+      editedPlace: prompt.place || 'Unknown',
+      editedSensitive: prompt.sensitive || 'SFW',
+      editedType: prompt.type || 'Unknown',
+      editedView: prompt.view || 'Unknown',
+      editedNudity: prompt.nudity || 'Unknown',
+      editedStability: prompt.stability || 1,
+      editedAuthor: prompt.author || 'dANNY',
+      editedImages: [...prompt.images]
+    })
+    setIsEditingPrompt(true)
+    setIsCreatingPrompt(false)
+  }
+
+  const handleCreatePrompt = () => {
+    setEditPromptData({
+      id: null,
+      editedTitle: '',
+      editedPrompt: '',
+      editedCharacter: 1,
+      editedPlace: '',
+      editedSensitive: 'SFW',
+      editedType: '',
+      editedView: '',
+      editedNudity: '',
+      editedStability: 1,
+      editedAuthor: 'dANNY',
+      editedImages: []
+    })
+    setPendingImages([null, null])
+    setIsEditingPrompt(true)
+    setIsCreatingPrompt(true)
+  }
+
+  const handleCloseEditPrompt = () => {
+    setIsEditingPrompt(false)
+    setIsCreatingPrompt(false)
+    setEditPromptData(null)
+    setPendingImages([null, null])
+  }
+
+  const handleUpdatePrompt = async () => {
+    if (!editPromptData) return
+
+    // Validation for required fields
+    if (isCreatingPrompt && !editPromptData.editedTitle) {
+      alert('Please enter a title for the prompt')
+      return
+    }
+    if (!editPromptData.editedPlace || !editPromptData.editedType || !editPromptData.editedView || !editPromptData.editedNudity) {
+      alert('Please fill in all required fields (Place, Type, View, Nudity)')
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      
+      if (isCreatingPrompt) {
+        // Validate: at least one image is required
+        const hasImages = pendingImages.some(img => img !== null)
+        if (!hasImages) {
+          alert('Please upload at least one image')
+          return
+        }
+
+        // Create new prompt
+        const response = await fetch('/api/prompts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            title: editPromptData.editedTitle,
+            prompt: editPromptData.editedPrompt,
+            character: parseInt(editPromptData.editedCharacter),
+            place: editPromptData.editedPlace,
+            sensitive: editPromptData.editedSensitive,
+            type: editPromptData.editedType,
+            view: editPromptData.editedView,
+            nudity: editPromptData.editedNudity,
+            stability: parseInt(editPromptData.editedStability),
+            author: editPromptData.editedAuthor
+          })
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          
+          // Upload pending images
+          await uploadPendingImages(result.id)
+          
+          // Force reload prompts cache
+          await promptsCache.loadData(true)
+          handleCloseEditPrompt()
+          showSavedToast()
+        } else {
+          alert('Failed to create prompt')
+        }
+      } else {
+        // Update existing prompt
+        const response = await fetch(`/api/prompts/${editPromptData.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            title: editPromptData.editedTitle,
+            prompt: editPromptData.editedPrompt,
+            character: parseInt(editPromptData.editedCharacter),
+            place: editPromptData.editedPlace,
+            sensitive: editPromptData.editedSensitive,
+            type: editPromptData.editedType,
+            view: editPromptData.editedView,
+            nudity: editPromptData.editedNudity,
+            stability: parseInt(editPromptData.editedStability),
+            author: editPromptData.editedAuthor
+          })
+        })
+
+        if (response.ok) {
+          // Upload any pending images for edit mode
+          const hasChangedImages = pendingImages.some(img => img !== null)
+          if (hasChangedImages) {
+            await uploadPendingImages(editPromptData.id)
+          }
+          
+          // Force reload prompts cache
+          await promptsCache.loadData(true)
+          handleCloseEditPrompt()
+          showSavedToast()
+        } else {
+          alert('Failed to update prompt')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save prompt:', error)
+      alert('Failed to save prompt')
+    }
+  }
+
+  const handleImageClick = (index) => {
+    if (!adminMode || !isEditingPrompt) return
+    setUploadingImageIndex(index)
+    imageInputRef.current?.click()
+  }
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || uploadingImageIndex === null || !editPromptData) return
+
+    // Store file for later upload (both create and edit mode)
+    const newPendingImages = [...pendingImages]
+    newPendingImages[uploadingImageIndex] = file
+    setPendingImages(newPendingImages)
+    
+    // Create preview URL and update display
+    const previewUrl = URL.createObjectURL(file)
+    const newImages = [...(editPromptData.editedImages || [])]
+    
+    // Ensure array has enough slots
+    while (newImages.length <= uploadingImageIndex) {
+      newImages.push(null)
+    }
+    // Replace the image at the clicked position
+    newImages[uploadingImageIndex] = previewUrl
+    
+    setEditPromptData(prev => ({
+      ...prev,
+      editedImages: newImages.filter(img => img !== null)
+    }))
+    
+    setUploadingImageIndex(null)
+    if (imageInputRef.current) {
+      imageInputRef.current.value = ''
+    }
+  }
+
+  // Helper function to upload pending images after prompt creation
+  const uploadPendingImages = async (promptId) => {
+    const token = localStorage.getItem('adminToken')
+    
+    for (let i = 0; i < pendingImages.length; i++) {
+      const file = pendingImages[i]
+      if (!file) continue
+      
+      const formData = new FormData()
+      formData.append('image', file)
+      
+      try {
+        // imageIndex is now passed as URL param
+        await fetch(`/api/prompts/${promptId}/image/${i}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        })
+      } catch (error) {
+        console.error(`Failed to upload image ${i + 1}:`, error)
+      }
+    }
+  }
+
+  // Costume edit handlers
+  const handleEditCostume = (costume) => {
+    setEditCostumeData({
+      ...costume,
+      editedTitle: costume.title || '',
+      editedPrompt: costume.prompt,
+      editedCharacter: costume.character || 1,
+      editedPlace: costume.place || 'Unknown',
+      editedSensitive: costume.sensitive || 'SFW',
+      editedType: costume.type || 'Costume',
+      editedView: costume.view || 'Unknown',
+      editedNudity: costume.nudity || 'Unknown',
+      editedStability: costume.stability || 1,
+      editedAuthor: costume.author || 'dANNY',
+      editedImages: [...costume.images]
+    })
+    setIsEditingCostume(true)
+    setIsCreatingCostume(false)
+  }
+
+  const handleCreateCostume = () => {
+    setEditCostumeData({
+      id: null,
+      editedTitle: '',
+      editedPrompt: '',
+      editedCharacter: 1,
+      editedPlace: '',
+      editedSensitive: 'SFW',
+      editedType: 'Costume',
+      editedView: '',
+      editedNudity: '',
+      editedStability: 1,
+      editedAuthor: 'dANNY',
+      editedImages: []
+    })
+    setPendingCostumeImages([null, null])
+    setIsEditingCostume(true)
+    setIsCreatingCostume(true)
+  }
+
+  const handleCloseEditCostume = () => {
+    setIsEditingCostume(false)
+    setIsCreatingCostume(false)
+    setEditCostumeData(null)
+    setPendingCostumeImages([null, null])
+  }
+
+  const handleUpdateCostume = async () => {
+    if (!editCostumeData) return
+
+    if (isCreatingCostume && !editCostumeData.editedTitle) {
+      alert('Please enter a title for the costume')
+      return
+    }
+    if (!editCostumeData.editedPlace || !editCostumeData.editedView || !editCostumeData.editedNudity) {
+      alert('Please fill in all required fields (Place, View, Nudity)')
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      
+      if (isCreatingCostume) {
+        const hasImages = pendingCostumeImages.some(img => img !== null)
+        if (!hasImages) {
+          alert('Please upload at least one image')
+          return
+        }
+
+        const response = await fetch('/api/costumes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            title: editCostumeData.editedTitle,
+            prompt: editCostumeData.editedPrompt,
+            character: parseInt(editCostumeData.editedCharacter),
+            place: editCostumeData.editedPlace,
+            sensitive: editCostumeData.editedSensitive,
+            type: editCostumeData.editedType || 'Costume',
+            view: editCostumeData.editedView,
+            nudity: editCostumeData.editedNudity,
+            stability: parseInt(editCostumeData.editedStability),
+            author: editCostumeData.editedAuthor
+          })
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          await uploadPendingCostumeImages(result.id)
+          await costumesCache.loadData(true)
+          handleCloseEditCostume()
+          showSavedToast()
+        } else {
+          alert('Failed to create costume')
+        }
+      } else {
+        const response = await fetch(`/api/costumes/${editCostumeData.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            title: editCostumeData.editedTitle,
+            prompt: editCostumeData.editedPrompt,
+            character: parseInt(editCostumeData.editedCharacter),
+            place: editCostumeData.editedPlace,
+            sensitive: editCostumeData.editedSensitive,
+            type: editCostumeData.editedType || 'Costume',
+            view: editCostumeData.editedView,
+            nudity: editCostumeData.editedNudity,
+            stability: parseInt(editCostumeData.editedStability),
+            author: editCostumeData.editedAuthor
+          })
+        })
+
+        if (response.ok) {
+          for (let i = 0; i < pendingCostumeImages.length; i++) {
+            const file = pendingCostumeImages[i]
+            if (!file) continue
+            
+            const formData = new FormData()
+            formData.append('image', file)
+            
+            await fetch(`/api/costumes/${editCostumeData.id}/image/${i}`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`
+              },
+              body: formData
+            })
+          }
+          
+          await costumesCache.loadData(true)
+          handleCloseEditCostume()
+          showSavedToast()
+        } else {
+          alert('Failed to update costume')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save costume:', error)
+      alert('Failed to save costume')
+    }
+  }
+
+  const handleCostumeImageClick = (index) => {
+    if (!adminMode || !isEditingCostume) return
+    setUploadingCostumeImageIndex(index)
+    costumeImageInputRef.current?.click()
+  }
+
+  const handleCostumeImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || uploadingCostumeImageIndex === null || !editCostumeData) return
+
+    const newPendingImages = [...pendingCostumeImages]
+    newPendingImages[uploadingCostumeImageIndex] = file
+    setPendingCostumeImages(newPendingImages)
+    
+    const previewUrl = URL.createObjectURL(file)
+    const newImages = [...(editCostumeData.editedImages || [])]
+    
+    while (newImages.length <= uploadingCostumeImageIndex) {
+      newImages.push(null)
+    }
+    newImages[uploadingCostumeImageIndex] = previewUrl
+    
+    setEditCostumeData(prev => ({
+      ...prev,
+      editedImages: newImages.filter(img => img !== null)
+    }))
+    
+    setUploadingCostumeImageIndex(null)
+    if (costumeImageInputRef.current) {
+      costumeImageInputRef.current.value = ''
+    }
+  }
+
+  const uploadPendingCostumeImages = async (costumeId) => {
+    const token = localStorage.getItem('adminToken')
+    
+    for (let i = 0; i < pendingCostumeImages.length; i++) {
+      const file = pendingCostumeImages[i]
+      if (!file) continue
+      
+      const formData = new FormData()
+      formData.append('image', file)
+      
+      try {
+        await fetch(`/api/costumes/${costumeId}/image/${i}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        })
+      } catch (error) {
+        console.error(`Failed to upload costume image ${i + 1}:`, error)
+      }
+    }
+  }
+
+  const handleCostumeAdminClick = () => {
+    if (!isLoggedIn) {
+      setShowPromptLogin(true)
+    } else {
+      setAdminMode(!adminMode)
+    }
+  }
+
+  // Costume type collapse toggle
+  const toggleCostumeType = (type) => {
+    setCollapsedCostumeTypes(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(type)) {
+        newSet.delete(type)
+      } else {
+        newSet.add(type)
+      }
+      return newSet
+    })
+  }
+
+  // Costume type drag handlers
+  const handleCostumeTypeDragStart = (e, type) => {
+    if (!adminMode) return
+    setDraggingCostumeType(type)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleCostumeTypeDragOver = (e, type) => {
+    if (!adminMode || !draggingCostumeType || draggingCostumeType === type) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleCostumeTypeDrop = async (e, targetType) => {
+    if (!adminMode || !draggingCostumeType || draggingCostumeType === targetType) return
+    e.preventDefault()
+
+    const typeOrder = [...costumeMetadata.typeOrder]
+    const fromIndex = typeOrder.indexOf(draggingCostumeType)
+    const toIndex = typeOrder.indexOf(targetType)
+
+    if (fromIndex !== -1 && toIndex !== -1) {
+      typeOrder.splice(fromIndex, 1)
+      typeOrder.splice(toIndex, 0, draggingCostumeType)
+
+      // Save to server
+      try {
+        const token = localStorage.getItem('adminToken')
+        await fetch('/api/costumes/metadata', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ typeOrder })
+        })
+        await costumesCache.loadData(true)
+      } catch (error) {
+        console.error('Failed to update type order:', error)
+      }
+    }
+
+    setDraggingCostumeType(null)
+  }
+
+  const handleCostumeTypeDragEnd = () => {
+    setDraggingCostumeType(null)
+  }
+
+  // Costume item drag handlers (within a type)
+  const handleCostumeDragStart = (e, costumeId, type) => {
+    if (!adminMode) return
+    setDraggingCostume(costumeId)
+    setDraggingCostumeFromType(type)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleCostumeDragOver = (e, costumeId, type) => {
+    if (!adminMode || !draggingCostume || type !== draggingCostumeFromType) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleCostumeDrop = async (e, targetCostumeId, type) => {
+    if (!adminMode || !draggingCostume || type !== draggingCostumeFromType || draggingCostume === targetCostumeId) return
+    e.preventDefault()
+
+    const costumeOrder = { ...costumeMetadata.costumeOrder }
+    const typeOrder = [...(costumeOrder[type] || [])]
+    const fromIndex = typeOrder.indexOf(draggingCostume)
+    const toIndex = typeOrder.indexOf(targetCostumeId)
+
+    if (fromIndex !== -1 && toIndex !== -1) {
+      typeOrder.splice(fromIndex, 1)
+      typeOrder.splice(toIndex, 0, draggingCostume)
+      costumeOrder[type] = typeOrder
+
+      // Save to server
+      try {
+        const token = localStorage.getItem('adminToken')
+        await fetch('/api/costumes/metadata', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ costumeOrder })
+        })
+        await costumesCache.loadData(true)
+      } catch (error) {
+        console.error('Failed to update costume order:', error)
+      }
+    }
+
+    setDraggingCostume(null)
+    setDraggingCostumeFromType(null)
+  }
+
+  const handleCostumeDragEnd = () => {
+    setDraggingCostume(null)
+    setDraggingCostumeFromType(null)
+  }
+
+  // Get costumes by type, sorted by metadata order
+  const getCostumesByType = (type) => {
+    const typeCostumes = sensitivityFilteredCostumes.filter(c => c.type === type)
+    const order = costumeMetadata.costumeOrder[type] || []
+    
+    return typeCostumes.sort((a, b) => {
+      const aIndex = order.indexOf(a.id)
+      const bIndex = order.indexOf(b.id)
+      if (aIndex === -1 && bIndex === -1) return 0
+      if (aIndex === -1) return 1
+      if (bIndex === -1) return -1
+      return aIndex - bIndex
+    })
+  }
+
   const showCopyToast = () => {
+    showToast('Copied!')
+  }
+
+  const showSavedToast = () => {
+    showToast('Saved!')
+  }
+
+  const showToast = (message) => {
     const toast = document.createElement('div')
     toast.className = 'copy-toast'
     toast.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
-      Copied!
+      ${message}
     `
 
     document.body.appendChild(toast)
@@ -238,6 +925,7 @@ function App() {
 
   const closePopup = () => {
     setSelectedPrompt(null)
+    setSelectedCostume(null)
   }
 
   const scrollToTop = () => {
@@ -397,6 +1085,13 @@ function App() {
     return true // 'all' shows both
   })
 
+  // Filter costumes by sensitivity
+  const sensitivityFilteredCostumes = costumes.filter(c => {
+    if (sensitivityFilter === 'sfw') return c.sensitive === 'SFW'
+    if (sensitivityFilter === 'nsfw') return c.sensitive === 'NSFW'
+    return true // 'all' shows both
+  })
+
   // Get unique values for each filter based on sensitivity-filtered prompts
   const getUniqueCharacterCounts = () => {
     const counts = new Set(sensitivityFilteredPrompts.map(p => p.character || 1))
@@ -535,6 +1230,15 @@ function App() {
                   Prompt
                 </button>
                 <button
+                  className={`sidebar-tab ${activeTab === 'costume' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('costume')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  Costume
+                </button>
+                <button
                   className={`sidebar-tab ${activeTab === 'gallery' ? 'active' : ''}`}
                   onClick={() => {
                     setActiveTab('gallery')
@@ -590,6 +1294,12 @@ function App() {
             Prompt
           </button>
           <button
+            className={`tab ${activeTab === 'costume' ? 'active' : ''}`}
+            onClick={() => setActiveTab('costume')}
+          >
+            Costume
+          </button>
+          <button
             className={`tab ${activeTab === 'gallery' ? 'active' : ''}`}
             onClick={() => setActiveTab('gallery')}
           >
@@ -623,13 +1333,22 @@ function App() {
                   <h2>Prompt Gallery</h2>
                   <p>Browse and use preset prompt examples</p>
                 </div>
-                <button
-                  className="help-button"
-                  onClick={() => setShowHelpModal(true)}
-                  title="Help & Information"
-                >
-                  ?
-                </button>
+                <div className="tab-header-actions">
+                  <button
+                    className="help-button"
+                    onClick={() => setShowHelpModal(true)}
+                    title="Help & Information"
+                  >
+                    ?
+                  </button>
+                  <button
+                    className={`admin-toggle-btn ${adminMode ? 'active' : ''}`}
+                    onClick={handlePromptAdminClick}
+                    title={isLoggedIn ? (adminMode ? 'Exit Admin Mode' : 'Enter Admin Mode') : 'Admin Login'}
+                  >
+                    {adminMode ? '🔓 Admin Mode' : (isLoggedIn ? '🔒 Admin' : '🔐 Login')}
+                  </button>
+                </div>
               </div>
 
               <div className="filter-container">
@@ -713,18 +1432,31 @@ function App() {
 
               <div className="content-section">
                 <div className="prompt-grid">
+                  {/* Add New Prompt Card (Admin Mode Only) */}
+                  {adminMode && (
+                    <div
+                      className="prompt-card add-new-card"
+                      onClick={handleCreatePrompt}
+                    >
+                      <div className="add-new-icon">+</div>
+                      <div className="prompt-info">
+                        <h4>Add New</h4>
+                      </div>
+                    </div>
+                  )}
                   {filteredPrompts.map((item) => (
                     <div
                       key={item.id}
-                      className="prompt-card"
-                      onClick={() => setSelectedPrompt(item)}
+                      className={`prompt-card ${adminMode ? 'admin-mode' : ''}`}
+                      onClick={() => adminMode ? handleEditPrompt(item) : setSelectedPrompt(item)}
                     >
                       <div
                         className="prompt-thumbnail"
                         style={{ backgroundImage: `url(${item.thumbnail})` }}
                       ></div>
                       <div className="prompt-info">
-                        <h4>Example {item.id}</h4>
+                        <h4>{item.title || ''}</h4>
+                        {adminMode && <span className="edit-indicator">✎ Edit</span>}
                       </div>
                     </div>
                   ))}
@@ -841,6 +1573,118 @@ function App() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'costume' && (
+            <div className="tab-content">
+              <div className="tab-header">
+                <div>
+                  <h2>Costume Gallery</h2>
+                  <p>Browse costume and outfit prompts by category</p>
+                </div>
+                <div className="tab-header-actions">
+                  <button
+                    className={`admin-toggle-btn ${adminMode ? 'active' : ''}`}
+                    onClick={handleCostumeAdminClick}
+                    title={isLoggedIn ? (adminMode ? 'Exit Admin Mode' : 'Enter Admin Mode') : 'Admin Login'}
+                  >
+                    {adminMode ? '🔓 Admin Mode' : (isLoggedIn ? '🔒 Admin' : '🔐 Login')}
+                  </button>
+                </div>
+              </div>
+
+              <div className="filter-info" style={{ padding: '0.5rem 1rem', color: '#9ca3b4', fontSize: '0.85rem' }}>
+                Showing {sensitivityFilteredCostumes.length} of {costumes.length} costumes
+                {adminMode && ' • Drag categories or items to reorder'}
+              </div>
+
+              {/* Add New Costume Button (Admin Mode Only) */}
+              {adminMode && (
+                <div style={{ padding: '0 1rem 1rem' }}>
+                  <button
+                    className="admin-btn admin-btn-primary"
+                    onClick={handleCreateCostume}
+                    style={{ width: '100%' }}
+                  >
+                    + Add New Costume
+                  </button>
+                </div>
+              )}
+
+              <div className="costume-categories">
+                {costumeMetadata.typeOrder.map((type) => {
+                  const typeCostumes = getCostumesByType(type)
+                  const totalTypeCostumes = costumes.filter(c => c.type === type).length
+                  const isCollapsed = collapsedCostumeTypes.has(type)
+
+                  if (totalTypeCostumes === 0) return null
+
+                  return (
+                    <div
+                      key={type}
+                      className={`costume-category-section ${draggingCostumeType === type ? 'dragging' : ''}`}
+                      draggable={adminMode}
+                      onDragStart={(e) => handleCostumeTypeDragStart(e, type)}
+                      onDragOver={(e) => handleCostumeTypeDragOver(e, type)}
+                      onDrop={(e) => handleCostumeTypeDrop(e, type)}
+                      onDragEnd={handleCostumeTypeDragEnd}
+                    >
+                      <div
+                        className="costume-category-header"
+                        onClick={() => toggleCostumeType(type)}
+                      >
+                        {adminMode && (
+                          <span className="costume-drag-handle" title="Drag to reorder">⋮⋮</span>
+                        )}
+                        <span className={`costume-category-arrow ${isCollapsed ? '' : 'expanded'}`}>
+                          ▶
+                        </span>
+                        <h3 className="costume-category-title">
+                          {type}
+                        </h3>
+                        <span className="costume-category-count">
+                          {typeCostumes.length !== totalTypeCostumes 
+                            ? `${typeCostumes.length} / ${totalTypeCostumes}` 
+                            : totalTypeCostumes}
+                        </span>
+                      </div>
+
+                      {!isCollapsed && (
+                        <div className="costume-grid">
+                          {typeCostumes.length > 0 ? (
+                            typeCostumes.map((item) => (
+                              <div
+                                key={item.id}
+                                className={`prompt-card ${adminMode ? 'admin-mode' : ''} ${draggingCostume === item.id ? 'dragging' : ''}`}
+                                draggable={adminMode}
+                                onDragStart={(e) => { e.stopPropagation(); handleCostumeDragStart(e, item.id, type) }}
+                                onDragOver={(e) => { e.stopPropagation(); handleCostumeDragOver(e, item.id, type) }}
+                                onDrop={(e) => { e.stopPropagation(); handleCostumeDrop(e, item.id, type) }}
+                                onDragEnd={handleCostumeDragEnd}
+                                onClick={() => adminMode ? handleEditCostume(item) : setSelectedCostume(item)}
+                              >
+                                <div
+                                  className="prompt-thumbnail"
+                                  style={{ backgroundImage: `url(${item.thumbnail})` }}
+                                ></div>
+                                <div className="prompt-info">
+                                  <h4>{item.title || ''}</h4>
+                                  {adminMode && <span className="edit-indicator">✎ Edit</span>}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="costume-category-empty">
+                              No costumes visible (filtered by sensitivity)
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -1313,6 +2157,531 @@ function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Costume Popup */}
+      {selectedCostume && (
+        <div className="popup-overlay" onClick={() => setSelectedCostume(null)}>
+          <div className="popup-content" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={() => setSelectedCostume(null)}>×</button>
+
+            <div className={`popup-images ${selectedCostume.imageOrientation === 'landscape' ? 'landscape' : 'portrait'}`}>
+              {selectedCostume.images.map((image, index) => (
+                <img key={index} src={image} alt={`Image ${index + 1}`} />
+              ))}
+            </div>
+
+            <div className="prompt-author">
+              Author: {selectedCostume.author}
+            </div>
+
+            <div className="prompt-meta-info">
+              {selectedCostume.character && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">Character:</span>
+                  <span className="prompt-meta-value">{selectedCostume.character}</span>
+                </div>
+              )}
+              {selectedCostume.place && selectedCostume.place !== 'Unknown' && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">Place:</span>
+                  <span className="prompt-meta-value">{selectedCostume.place}</span>
+                </div>
+              )}
+              {selectedCostume.type && selectedCostume.type !== 'Unknown' && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">Type:</span>
+                  <span className="prompt-meta-value">{selectedCostume.type}</span>
+                </div>
+              )}
+              {selectedCostume.view && selectedCostume.view !== 'Unknown' && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">View:</span>
+                  <span className="prompt-meta-value">{selectedCostume.view}</span>
+                </div>
+              )}
+              {selectedCostume.stability && (
+                <div className="prompt-meta-item">
+                  <span className="prompt-meta-label">Stability:</span>
+                  <span className={`stability-badge stability-${selectedCostume.stability}`}>
+                    S{selectedCostume.stability}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <button
+              className="copy-button"
+              onClick={() => handleCopyPrompt(selectedCostume.prompt, selectedCostume.id, 'costume')}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Copy Prompt
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt Edit Modal (Admin Mode) */}
+      {isEditingPrompt && editPromptData && (
+        <div className="popup-overlay" onClick={handleCloseEditPrompt}>
+          <div className="popup-content edit-mode" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={handleCloseEditPrompt}>×</button>
+
+            <h3 className="edit-modal-title">
+              {isCreatingPrompt ? 'Create New Prompt' : `Edit Prompt #${editPromptData.id}`}
+            </h3>
+
+            {/* Hidden file input for image upload */}
+            <input
+              type="file"
+              ref={imageInputRef}
+              style={{ display: 'none' }}
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleImageUpload}
+            />
+
+            {/* Editable Images */}
+            {isCreatingPrompt ? (
+              // Create mode: show upload placeholders with previews
+              <div className="popup-images edit-images portrait">
+                <div className="edit-image-placeholder-container">
+                  {[0, 1].map(index => (
+                    <div
+                      key={index}
+                      className={`edit-image-placeholder ${pendingImages[index] ? 'has-image' : ''}`}
+                      onClick={() => handleImageClick(index)}
+                    >
+                      {editPromptData.editedImages[index] ? (
+                        <>
+                          <img src={editPromptData.editedImages[index]} alt={`Preview ${index + 1}`} />
+                          <div className="edit-image-overlay">
+                            <span>📷 Click to replace</span>
+                          </div>
+                        </>
+                      ) : (
+                        <span>📷 Click to upload Image {index + 1} {index === 0 ? <span className="required">*</span> : '(optional)'}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : editPromptData.id ? (
+              // Edit mode: show existing images or upload placeholders
+              <div className={`popup-images edit-images ${editPromptData.imageOrientation === 'landscape' ? 'landscape' : 'portrait'}`}>
+                {editPromptData.editedImages.length > 0 ? (
+                  editPromptData.editedImages.map((image, index) => (
+                    <div
+                      key={index}
+                      className="edit-image-container"
+                      onClick={() => handleImageClick(index)}
+                    >
+                      <img src={image} alt={`Image ${index + 1}`} />
+                      <div className="edit-image-overlay">
+                        <span>📷 Click to replace</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="edit-image-placeholder-container">
+                    <div
+                      className="edit-image-placeholder"
+                      onClick={() => handleImageClick(0)}
+                    >
+                      <span>📷 Click to upload Image 1</span>
+                    </div>
+                    <div
+                      className="edit-image-placeholder"
+                      onClick={() => handleImageClick(1)}
+                    >
+                      <span>📷 Click to upload Image 2</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Datalists for autocomplete */}
+            <datalist id="place-options">
+              {promptFieldOptions.place.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+            <datalist id="type-options">
+              {promptFieldOptions.type.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+            <datalist id="view-options">
+              {promptFieldOptions.view.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+            <datalist id="nudity-options">
+              {promptFieldOptions.nudity.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+
+            {/* Editable Meta Fields */}
+            <div className="edit-form">
+              <div className="edit-field full-width">
+                <label>Title: {isCreatingPrompt && <span className="required">*</span>}</label>
+                <input
+                  type="text"
+                  value={editPromptData.editedTitle}
+                  onChange={(e) => setEditPromptData(prev => ({ ...prev, editedTitle: e.target.value }))}
+                  placeholder="Enter prompt title..."
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Author:</label>
+                <input
+                  type="text"
+                  value={editPromptData.editedAuthor}
+                  onChange={(e) => setEditPromptData(prev => ({ ...prev, editedAuthor: e.target.value }))}
+                />
+              </div>
+
+              <div className="edit-field-grid">
+                <div className="edit-field">
+                  <label>Character:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={editPromptData.editedCharacter}
+                    onChange={(e) => setEditPromptData(prev => ({ ...prev, editedCharacter: e.target.value }))}
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Place: <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    list="place-options"
+                    value={editPromptData.editedPlace}
+                    onChange={(e) => setEditPromptData(prev => ({ ...prev, editedPlace: e.target.value }))}
+                    placeholder="Type or select..."
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Sensitivity:</label>
+                  <select
+                    value={editPromptData.editedSensitive}
+                    onChange={(e) => setEditPromptData(prev => ({ ...prev, editedSensitive: e.target.value }))}
+                  >
+                    <option value="SFW">SFW</option>
+                    <option value="NSFW">NSFW</option>
+                  </select>
+                </div>
+
+                <div className="edit-field">
+                  <label>Type: <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    list="type-options"
+                    value={editPromptData.editedType}
+                    onChange={(e) => setEditPromptData(prev => ({ ...prev, editedType: e.target.value }))}
+                    placeholder="Type or select..."
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>View: <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    list="view-options"
+                    value={editPromptData.editedView}
+                    onChange={(e) => setEditPromptData(prev => ({ ...prev, editedView: e.target.value }))}
+                    placeholder="Type or select..."
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Nudity: <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    list="nudity-options"
+                    value={editPromptData.editedNudity}
+                    onChange={(e) => setEditPromptData(prev => ({ ...prev, editedNudity: e.target.value }))}
+                    placeholder="Type or select..."
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Stability:</label>
+                  <select
+                    value={editPromptData.editedStability}
+                    onChange={(e) => setEditPromptData(prev => ({ ...prev, editedStability: e.target.value }))}
+                  >
+                    <option value="1">S1 - High</option>
+                    <option value="2">S2 - Medium</option>
+                    <option value="3">S3 - Low</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Editable Prompt Text */}
+              <div className="edit-field full-width">
+                <label>Prompt:</label>
+                <textarea
+                  value={editPromptData.editedPrompt}
+                  onChange={(e) => setEditPromptData(prev => ({ ...prev, editedPrompt: e.target.value }))}
+                  rows={6}
+                  placeholder="Enter prompt text..."
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="edit-actions">
+              <button className="cancel-button" onClick={handleCloseEditPrompt}>
+                Cancel
+              </button>
+              <button className="update-button" onClick={handleUpdatePrompt}>
+                {isCreatingPrompt ? 'Create Prompt' : 'Update Prompt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Costume Edit Modal (Admin Mode) */}
+      {isEditingCostume && editCostumeData && (
+        <div className="popup-overlay" onClick={handleCloseEditCostume}>
+          <div className="popup-content edit-mode" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={handleCloseEditCostume}>×</button>
+
+            <h3 className="edit-modal-title">
+              {isCreatingCostume ? 'Create New Costume' : `Edit Costume #${editCostumeData.id}`}
+            </h3>
+
+            {/* Hidden file input for image upload */}
+            <input
+              type="file"
+              ref={costumeImageInputRef}
+              style={{ display: 'none' }}
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleCostumeImageUpload}
+            />
+
+            {/* Editable Images */}
+            {isCreatingCostume ? (
+              <div className="popup-images edit-images portrait">
+                <div className="edit-image-placeholder-container">
+                  {[0, 1].map(index => (
+                    <div
+                      key={index}
+                      className={`edit-image-placeholder ${pendingCostumeImages[index] ? 'has-image' : ''}`}
+                      onClick={() => handleCostumeImageClick(index)}
+                    >
+                      {editCostumeData.editedImages[index] ? (
+                        <>
+                          <img src={editCostumeData.editedImages[index]} alt={`Preview ${index + 1}`} />
+                          <div className="edit-image-overlay">
+                            <span>📷 Click to replace</span>
+                          </div>
+                        </>
+                      ) : (
+                        <span>📷 Click to upload Image {index + 1} {index === 0 ? <span className="required">*</span> : '(optional)'}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : editCostumeData.id ? (
+              <div className={`popup-images edit-images ${editCostumeData.imageOrientation === 'landscape' ? 'landscape' : 'portrait'}`}>
+                {editCostumeData.editedImages.length > 0 ? (
+                  editCostumeData.editedImages.map((image, index) => (
+                    <div
+                      key={index}
+                      className="edit-image-container"
+                      onClick={() => handleCostumeImageClick(index)}
+                    >
+                      <img src={image} alt={`Image ${index + 1}`} />
+                      <div className="edit-image-overlay">
+                        <span>📷 Click to replace</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="edit-image-placeholder-container">
+                    <div
+                      className="edit-image-placeholder"
+                      onClick={() => handleCostumeImageClick(0)}
+                    >
+                      <span>📷 Click to upload Image 1</span>
+                    </div>
+                    <div
+                      className="edit-image-placeholder"
+                      onClick={() => handleCostumeImageClick(1)}
+                    >
+                      <span>📷 Click to upload Image 2</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Datalists for autocomplete */}
+            <datalist id="costume-type-options">
+              {costumeMetadata.typeOrder.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+            <datalist id="costume-place-options">
+              {promptFieldOptions.place.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+            <datalist id="costume-view-options">
+              {promptFieldOptions.view.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+            <datalist id="costume-nudity-options">
+              {promptFieldOptions.nudity.map(opt => (
+                <option key={opt} value={opt} />
+              ))}
+            </datalist>
+
+            {/* Editable Meta Fields */}
+            <div className="edit-form">
+              <div className="edit-field full-width">
+                <label>Title: {isCreatingCostume && <span className="required">*</span>}</label>
+                <input
+                  type="text"
+                  value={editCostumeData.editedTitle}
+                  onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedTitle: e.target.value }))}
+                  placeholder="Enter costume title..."
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Author:</label>
+                <input
+                  type="text"
+                  value={editCostumeData.editedAuthor}
+                  onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedAuthor: e.target.value }))}
+                />
+              </div>
+
+              <div className="edit-field-grid">
+                <div className="edit-field">
+                  <label>Character:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={editCostumeData.editedCharacter}
+                    onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedCharacter: e.target.value }))}
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Place: <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    list="costume-place-options"
+                    value={editCostumeData.editedPlace}
+                    onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedPlace: e.target.value }))}
+                    placeholder="Type or select..."
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Type: <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    list="costume-type-options"
+                    value={editCostumeData.editedType}
+                    onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedType: e.target.value }))}
+                    placeholder="Type or select category..."
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Sensitivity:</label>
+                  <select
+                    value={editCostumeData.editedSensitive}
+                    onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedSensitive: e.target.value }))}
+                  >
+                    <option value="SFW">SFW</option>
+                    <option value="NSFW">NSFW</option>
+                  </select>
+                </div>
+
+                <div className="edit-field">
+                  <label>View: <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    list="costume-view-options"
+                    value={editCostumeData.editedView}
+                    onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedView: e.target.value }))}
+                    placeholder="Type or select..."
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Nudity: <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    list="costume-nudity-options"
+                    value={editCostumeData.editedNudity}
+                    onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedNudity: e.target.value }))}
+                    placeholder="Type or select..."
+                  />
+                </div>
+
+                <div className="edit-field">
+                  <label>Stability:</label>
+                  <select
+                    value={editCostumeData.editedStability}
+                    onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedStability: e.target.value }))}
+                  >
+                    <option value="1">S1 - High</option>
+                    <option value="2">S2 - Medium</option>
+                    <option value="3">S3 - Low</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Editable Prompt Text */}
+              <div className="edit-field full-width">
+                <label>Prompt:</label>
+                <textarea
+                  value={editCostumeData.editedPrompt}
+                  onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedPrompt: e.target.value }))}
+                  rows={6}
+                  placeholder="Enter prompt text..."
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="edit-actions">
+              <button className="cancel-button" onClick={handleCloseEditCostume}>
+                Cancel
+              </button>
+              <button className="update-button" onClick={handleUpdateCostume}>
+                {isCreatingCostume ? 'Create Costume' : 'Update Costume'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt Admin Login Modal */}
+      {showPromptLogin && (
+        <AdminLogin
+          onClose={() => setShowPromptLogin(false)}
+          onLoginSuccess={handlePromptLoginSuccess}
+        />
       )}
 
       {selectedLora && (
