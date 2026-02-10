@@ -16,13 +16,13 @@
 
 .request-header h2 {
   margin: 0 0 0.5rem 0;
-  color: #e0e6ed;
+  color: var(--text-primary);
   font-size: 2rem;
 }
 
 .request-header p {
   margin: 0;
-  color: #9ca3af;
+  color: var(--text-secondary);
 }
 
 .request-header-actions {
@@ -34,10 +34,10 @@
 /* Admin Toggle Button */
 .admin-toggle-btn {
   padding: 0.75rem 1.5rem;
-  background: rgba(99, 130, 191, 0.2);
-  border: 1px solid rgba(99, 130, 191, 0.3);
+  background: var(--border-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
-  color: #9ca3af;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 500;
@@ -45,34 +45,34 @@
 }
 
 .admin-toggle-btn:hover {
-  background: rgba(99, 130, 191, 0.3);
-  color: #e0e6ed;
+  background: var(--border-primary);
+  color: var(--text-primary);
 }
 
 .admin-toggle-btn.active {
-  background: linear-gradient(135deg, #6382bf 0%, #5a7bb3 100%);
-  color: #ffffff;
-  border-color: #6382bf;
+  background: var(--accent-bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
 }
 
 /* Submit Request Button */
 .submit-request-button {
   padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #6382bf 0%, #5a7bb3 100%);
-  border: 1px solid rgba(99, 130, 191, 0.3);
+  background: var(--accent-bg-hover);
+  border: 1px solid var(--accent-primary);
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(99, 130, 191, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .submit-request-button:hover {
-  background: linear-gradient(135deg, #7a92cf 0%, #6a8bc3 100%);
+  background: var(--accent-hover);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(99, 130, 191, 0.4);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .submit-request-button:active {
@@ -92,10 +92,10 @@
 
 .status-chip {
   padding: 0.4rem 0.85rem;
-  background: rgba(31, 35, 50, 0.6);
-  border: 1px solid rgba(99, 130, 191, 0.25);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
   border-radius: 20px;
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
@@ -106,15 +106,15 @@
 }
 
 .status-chip:hover {
-  background: rgba(99, 130, 191, 0.15);
-  border-color: rgba(99, 130, 191, 0.4);
-  color: #e0e6ed;
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
 }
 
 .status-chip.active {
-  background: rgba(99, 130, 191, 0.25);
-  border-color: #6382bf;
-  color: #e0e6ed;
+  background: var(--border-secondary);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .status-chip-count {
@@ -133,19 +133,19 @@
 
 /* Status-specific chip colors when active */
 .status-chip-pending.active {
-  border-color: #9ca3b4;
+  border-color: var(--text-secondary);
   background: rgba(156, 163, 180, 0.2);
 }
 
 .status-chip-in-progress.active {
-  border-color: #6382bf;
-  background: rgba(99, 130, 191, 0.2);
+  border-color: var(--accent-primary);
+  background: var(--border-secondary);
 }
 
 .status-chip-completed.active {
-  border-color: #4ade80;
+  border-color: var(--success-green);
   background: rgba(74, 222, 128, 0.15);
-  color: #4ade80;
+  color: var(--success-green);
 }
 
 .status-chip-completed.active .status-chip-count {
@@ -153,9 +153,9 @@
 }
 
 .status-chip-rejected.active {
-  border-color: #e07a5f;
+  border-color: var(--chart-costume);
   background: rgba(224, 122, 95, 0.15);
-  color: #e07a5f;
+  color: var(--chart-costume);
 }
 
 .status-chip-rejected.active .status-chip-count {
@@ -190,12 +190,12 @@
 }
 
 .request-category-header:hover {
-  background: rgba(99, 130, 191, 0.08);
+  background: var(--bg-hover);
 }
 
 .request-category-arrow {
   font-size: 0.65rem;
-  color: #8ba4d0;
+  color: var(--accent-secondary);
   transition: transform 0.25s ease;
   display: inline-block;
   flex-shrink: 0;
@@ -207,7 +207,7 @@
 
 .request-category-title {
   margin: 0;
-  color: #e0e6ed;
+  color: var(--text-primary);
   font-size: 1.1rem;
   font-weight: 600;
   display: flex;
@@ -221,18 +221,18 @@
 
 .request-category-count {
   padding: 0.15rem 0.6rem;
-  background: rgba(99, 130, 191, 0.2);
-  border: 1px solid rgba(99, 130, 191, 0.25);
+  background: var(--border-secondary);
+  border: 1px solid var(--border-secondary);
   border-radius: 10px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #8ba4d0;
+  color: var(--accent-secondary);
   margin-left: auto;
 }
 
 .request-category-empty {
   padding: 1.5rem 2rem;
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 0.9rem;
   font-style: italic;
 }
@@ -252,7 +252,7 @@
 
   /* Custom scrollbar */
   scrollbar-width: thin;
-  scrollbar-color: rgba(99, 130, 191, 0.35) rgba(31, 35, 50, 0.3);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .request-grid-list::-webkit-scrollbar {
@@ -260,26 +260,26 @@
 }
 
 .request-grid-list::-webkit-scrollbar-track {
-  background: rgba(31, 35, 50, 0.3);
+  background: var(--scrollbar-track);
   border-radius: 3px;
 }
 
 .request-grid-list::-webkit-scrollbar-thumb {
-  background: rgba(99, 130, 191, 0.35);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
   transition: background 0.2s ease;
 }
 
 .request-grid-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 130, 191, 0.55);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* ============================================
    Request Card - Compact + Expandable
    ============================================ */
 .request-card {
-  background: linear-gradient(145deg, rgba(31, 35, 50, 0.8) 0%, rgba(42, 47, 62, 0.8) 100%);
-  border: 1px solid rgba(99, 130, 191, 0.25);
+  background: linear-gradient(145deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+  border: 1px solid var(--border-secondary);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -292,7 +292,7 @@
 }
 
 .request-card:hover {
-  border-color: rgba(99, 130, 191, 0.45);
+  border-color: var(--border-hover);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   transform: translateY(-2px);
 }
@@ -333,11 +333,11 @@
 
 .request-type-badge {
   padding: 0.25rem 0.75rem;
-  background: rgba(99, 130, 191, 0.3);
+  background: var(--border-primary);
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #8ba4d0;
+  color: var(--accent-secondary);
 }
 
 .request-status-badge {
@@ -345,12 +345,12 @@
   border-radius: 10px;
   font-size: 0.7rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .request-expand-icon {
   font-size: 0.6rem;
-  color: #6b7a99;
+  color: var(--text-muted);
   transition: transform 0.25s ease;
   display: inline-block;
 }
@@ -361,7 +361,7 @@
 
 .request-card-summary h3 {
   margin: 0 0 0.2rem 0;
-  color: #e0e6ed;
+  color: var(--text-primary);
   font-size: 0.95rem;
   font-weight: 600;
   white-space: nowrap;
@@ -371,7 +371,7 @@
 
 .request-outfit {
   margin: 0;
-  color: #8ba4d0;
+  color: var(--accent-secondary);
   font-size: 0.8rem;
   white-space: nowrap;
   overflow: hidden;
@@ -381,7 +381,7 @@
 /* Expanded details */
 .request-card-details {
   padding: 0 0.75rem 0.75rem 0.75rem;
-  border-top: 1px solid rgba(99, 130, 191, 0.15);
+  border-top: 1px solid var(--bg-hover);
   margin-top: 0.25rem;
   padding-top: 0.5rem;
   animation: slideDown 0.2s ease;
@@ -411,33 +411,33 @@
 
 .request-field {
   margin: 0.3rem 0;
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 0.8rem;
   line-height: 1.4;
 }
 
 .request-field strong {
-  color: #b4b8c5;
+  color: var(--text-secondary);
 }
 
 .request-field a {
-  color: #6382bf;
+  color: var(--accent-primary);
   text-decoration: none;
   word-break: break-all;
 }
 
 .request-field a:hover {
-  color: #8ba4d0;
+  color: var(--accent-secondary);
   text-decoration: underline;
 }
 
 .request-field-empty {
-  color: #6b7280;
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .request-date {
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 0.7rem;
   margin-top: 0.35rem;
 }
@@ -445,7 +445,7 @@
 /* Admin controls on card */
 .request-card-admin {
   padding: 0.5rem 0.75rem 0.75rem 0.75rem;
-  border-top: 1px solid rgba(99, 130, 191, 0.15);
+  border-top: 1px solid var(--bg-hover);
 }
 
 .request-admin-controls {
@@ -457,30 +457,30 @@
 
 .status-select {
   padding: 0.4rem;
-  background: rgba(31, 35, 50, 0.8);
-  border: 1px solid rgba(99, 130, 191, 0.3);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
-  color: #e0e6ed;
+  color: var(--text-primary);
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .status-select:hover {
-  border-color: rgba(99, 130, 191, 0.5);
+  border-color: var(--border-active);
 }
 
 .status-select:focus {
   outline: none;
-  border-color: #6382bf;
+  border-color: var(--accent-primary);
 }
 
 .admin-button {
   padding: 0.3rem 0.5rem;
-  background: rgba(31, 35, 50, 0.8);
-  border: 1px solid rgba(99, 130, 191, 0.3);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
-  color: #e0e6ed;
+  color: var(--text-primary);
   font-size: 0.85rem;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -492,8 +492,8 @@
 }
 
 .admin-button:hover:not(:disabled) {
-  border-color: rgba(99, 130, 191, 0.5);
-  background: rgba(42, 47, 62, 0.8);
+  border-color: var(--border-active);
+  background: var(--bg-tertiary);
 }
 
 .admin-button:disabled {
@@ -502,14 +502,14 @@
 }
 
 .edit-button:hover:not(:disabled) {
-  border-color: #6382bf;
-  background: rgba(99, 130, 191, 0.2);
+  border-color: var(--accent-primary);
+  background: var(--border-secondary);
 }
 
 .delete-button:hover:not(:disabled) {
-  border-color: #e07a5f;
+  border-color: var(--chart-costume);
   background: rgba(224, 122, 95, 0.2);
-  color: #e07a5f;
+  color: var(--chart-costume);
 }
 
 .order-buttons {
@@ -534,7 +534,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 1.1rem;
 }
 
@@ -556,8 +556,8 @@
 }
 
 .request-modal-content {
-  background: linear-gradient(145deg, #1e222f 0%, #181b26 100%);
-  border: 1px solid rgba(99, 130, 191, 0.3);
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
   border-radius: 16px;
   padding: 2rem;
   max-width: 600px;
@@ -586,7 +586,7 @@
   right: 1rem;
   background: none;
   border: none;
-  color: #9ca3b4;
+  color: var(--text-secondary);
   font-size: 2rem;
   cursor: pointer;
   width: 32px;
@@ -600,13 +600,13 @@
 }
 
 .request-modal-close:hover {
-  background: rgba(99, 130, 191, 0.1);
-  color: #b4b8c5;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
 }
 
 .request-modal-content h2 {
   margin: 0 0 1.5rem 0;
-  color: #e0e6ed;
+  color: var(--text-primary);
   font-size: 1.75rem;
 }
 
@@ -620,10 +620,10 @@
 .type-button {
   flex: 1;
   padding: 0.75rem 1rem;
-  background: rgba(31, 35, 50, 0.6);
-  border: 2px solid rgba(99, 130, 191, 0.3);
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-primary);
   border-radius: 8px;
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
@@ -631,16 +631,16 @@
 }
 
 .type-button:hover:not(:disabled) {
-  background: rgba(99, 130, 191, 0.2);
-  border-color: rgba(99, 130, 191, 0.5);
-  color: #e0e6ed;
+  background: var(--border-secondary);
+  border-color: var(--border-active);
+  color: var(--text-primary);
 }
 
 .type-button.active {
-  background: linear-gradient(135deg, #6382bf 0%, #5a7bb3 100%);
-  border-color: #6382bf;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(99, 130, 191, 0.4);
+  background: var(--accent-bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .type-button:disabled {
@@ -662,22 +662,22 @@
 }
 
 .form-group label {
-  color: #b4b8c5;
+  color: var(--text-secondary);
   font-size: 0.95rem;
   font-weight: 500;
 }
 
 .required {
-  color: #e07a5f;
+  color: var(--chart-costume);
 }
 
 .form-group input,
 .form-group textarea {
   padding: 0.75rem;
-  background: rgba(31, 35, 50, 0.8);
-  border: 1px solid rgba(99, 130, 191, 0.3);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
-  color: #e0e6ed;
+  color: var(--text-primary);
   font-size: 0.95rem;
   font-family: inherit;
   transition: all 0.2s ease;
@@ -686,22 +686,22 @@
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #6382bf;
-  box-shadow: 0 0 0 3px rgba(99, 130, 191, 0.1);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--bg-hover);
 }
 
 .form-group input::placeholder,
 .form-group textarea::placeholder {
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .form-group input.error,
 .form-group textarea.error {
-  border-color: #e07a5f;
+  border-color: var(--chart-costume);
 }
 
 .error-message {
-  color: #e07a5f;
+  color: var(--chart-costume);
   font-size: 0.85rem;
 }
 
@@ -723,28 +723,28 @@
 }
 
 .cancel-button {
-  background: rgba(31, 35, 50, 0.8);
-  border: 1px solid rgba(99, 130, 191, 0.3);
-  color: #9ca3af;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
 }
 
 .cancel-button:hover {
-  background: rgba(42, 47, 62, 0.8);
-  border-color: rgba(99, 130, 191, 0.5);
-  color: #b4b8c5;
+  background: var(--bg-tertiary);
+  border-color: var(--border-active);
+  color: var(--text-secondary);
 }
 
 .submit-button {
-  background: linear-gradient(135deg, #6382bf 0%, #5a7bb3 100%);
-  border: 1px solid rgba(99, 130, 191, 0.3);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(99, 130, 191, 0.3);
+  background: var(--accent-bg-hover);
+  border: 1px solid var(--accent-primary);
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .submit-button:hover {
-  background: linear-gradient(135deg, #7a92cf 0%, #6a8bc3 100%);
+  background: var(--accent-hover);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(99, 130, 191, 0.4);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .submit-button:active {

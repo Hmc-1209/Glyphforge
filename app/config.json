@@ -14,5 +14,9 @@
   "requestFolder": {
     "path": "D:\\Glyphforge-data\\requests\\",
     "name": "requests"
+  },
+  "workflowFolder": {
+    "path": "D:\\Glyphforge-data\\workflows\\",
+    "name": "workflows"
   }
 }

@@ -318,11 +318,11 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending': return '#9ca3b4'
-      case 'in-progress': return '#6382bf'
-      case 'completed': return '#4ade80'
-      case 'rejected': return '#e07a5f'
-      default: return '#9ca3b4'
+      case 'pending': return 'var(--text-secondary)'
+      case 'in-progress': return 'var(--accent-primary)'
+      case 'completed': return 'var(--success-green)'
+      case 'rejected': return 'var(--chart-costume)'
+      default: return 'var(--text-secondary)'
     }
   }
 

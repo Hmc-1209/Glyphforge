@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Charcoal Theme Preview - Glyphforge</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #141414;
+      color: #E0E0E0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      background: #1E1E1E;
+      border: 1px solid #404040;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      color: #E0E0E0;
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: #909090;
+      font-size: 14px;
+    }
+
+    /* Color Palette Display */
+    .palette {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .color-swatch {
+      background: #1E1E1E;
+      border: 1px solid #404040;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .swatch-color {
+      height: 80px;
+    }
+
+    .swatch-info {
+      padding: 12px;
+    }
+
+    .swatch-info .name {
+      color: #E0E0E0;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .swatch-info .code {
+      color: #909090;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    /* Cards Grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: #1E1E1E;
+      border: 1px solid #404040;
+      border-radius: 12px;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-image {
+      background: linear-gradient(135deg, #282828 0%, #1E1E1E 100%);
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-bottom: 1px solid #404040;
+    }
+
+    .card-image span {
+      font-size: 48px;
+    }
+
+    .card-content {
+      padding: 16px;
+    }
+
+    .card-title {
+      color: #E0E0E0;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .card-meta {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .meta-tag {
+      background: #282828;
+      border: 1px solid #404040;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #909090;
+    }
+
+    .card-button {
+      width: 100%;
+      padding: 12px;
+      background: rgba(119, 153, 204, 0.15);
+      border: 1px solid rgba(119, 153, 204, 0.3);
+      border-radius: 8px;
+      color: #7799CC;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .card-button:hover {
+      background: rgba(119, 153, 204, 0.25);
+      border-color: rgba(119, 153, 204, 0.5);
+    }
+
+    /* Sidebar Simulation */
+    .layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 768px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sidebar {
+      background: #1E1E1E;
+      border: 1px solid #404040;
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .sidebar-title {
+      color: #909090;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }
+
+    .sidebar-item {
+      padding: 12px;
+      border-radius: 8px;
+      color: #E0E0E0;
+      font-size: 14px;
+      cursor: pointer;
+      margin-bottom: 4px;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-item:hover {
+      background: #282828;
+    }
+
+    .sidebar-item.active {
+      background: #282828;
+      border: 1px solid #404040;
+    }
+
+    .main-content {
+      background: #1E1E1E;
+      border: 1px solid #404040;
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .main-content h2 {
+      color: #E0E0E0;
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+
+    .main-content p {
+      color: #909090;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    /* Toggle Switch Demo */
+    .toggle-demo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .toggle {
+      width: 56px;
+      height: 30px;
+      background: #282828;
+      border: 1px solid #404040;
+      border-radius: 15px;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      background: #E0E0E0;
+      border-radius: 50%;
+      top: 2px;
+      left: 3px;
+      transition: left 0.2s;
+    }
+
+    .toggle.active {
+      background: rgba(119, 153, 204, 0.3);
+      border-color: #7799CC;
+    }
+
+    .toggle.active::after {
+      left: 27px;
+      background: #7799CC;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 24px;
+      color: #909090;
+      font-size: 13px;
+      border-top: 1px solid #404040;
+      margin-top: 40px;
+    }
+
+    .footer a {
+      color: #7799CC;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔥 Charcoal Theme Preview</h1>
+      <p>炭火配色方案 - 溫暖、柔和、低對比護眼</p>
+    </div>
+
+    <!-- Color Palette -->
+    <div class="palette">
+      <div class="color-swatch">
+        <div class="swatch-color" style="background: #141414;"></div>
+        <div class="swatch-info">
+          <div class="name">背景主色</div>
+          <div class="code">#141414</div>
+        </div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-color" style="background: #1E1E1E;"></div>
+        <div class="swatch-info">
+          <div class="name">卡片背景</div>
+          <div class="code">#1E1E1E</div>
+        </div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-color" style="background: #282828;"></div>
+        <div class="swatch-info">
+          <div class="name">次要背景</div>
+          <div class="code">#282828</div>
+        </div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-color" style="background: #404040;"></div>
+        <div class="swatch-info">
+          <div class="name">邊框線條</div>
+          <div class="code">#404040</div>
+        </div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-color" style="background: #E0E0E0;"></div>
+        <div class="swatch-info">
+          <div class="name">主要文字</div>
+          <div class="code">#E0E0E0</div>
+        </div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-color" style="background: #909090;"></div>
+        <div class="swatch-info">
+          <div class="name">次要文字</div>
+          <div class="code">#909090</div>
+        </div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-color" style="background: #7799CC;"></div>
+        <div class="swatch-info">
+          <div class="name">強調色</div>
+          <div class="code">#7799CC</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Layout Demo -->
+    <div class="layout">
+      <div class="sidebar">
+        <div class="sidebar-title">Navigation</div>
+        <div class="sidebar-item active">📝 Prompts</div>
+        <div class="sidebar-item">👗 Costumes</div>
+        <div class="sidebar-item">🎨 LoRAs</div>
+        <div class="sidebar-item">📊 Statistics</div>
+        <div class="sidebar-item">📋 Changelog</div>
+      </div>
+      <div class="main-content">
+        <h2>內容區域示例</h2>
+        <p>這是炭火配色方案的預覽。主要特點是使用溫暖的深灰色調，搭配柔和的白色文字，對眼睛非常友善。邊框使用 #404040 確保各元素輪廓清晰可見。</p>
+        <p>強調色採用柔和的藍色 #7799CC，用於按鈕和互動元素，與整體配色和諧統一。</p>
+        <div class="toggle-demo">
+          <span>Safety Switch:</span>
+          <div class="toggle" onclick="this.classList.toggle('active')"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cards Demo -->
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-image"><span>👗</span></div>
+        <div class="card-content">
+          <div class="card-title">Costume Example</div>
+          <div class="card-meta">
+            <span class="meta-tag">SFW</span>
+            <span class="meta-tag">Traditional</span>
+          </div>
+          <button class="card-button">Copy Prompt</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-image"><span>📝</span></div>
+        <div class="card-content">
+          <div class="card-title">Prompt Example</div>
+          <div class="card-meta">
+            <span class="meta-tag">Outdoor</span>
+            <span class="meta-tag">S1</span>
+          </div>
+          <button class="card-button">Copy Prompt</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-image"><span>🎨</span></div>
+        <div class="card-content">
+          <div class="card-title">LoRA Example</div>
+          <div class="card-meta">
+            <span class="meta-tag">Illustrious</span>
+            <span class="meta-tag">Girl</span>
+          </div>
+          <button class="card-button">Download</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Charcoal Theme Preview for Glyphforge | <a href="/">← Back to Main</a></p>
+    </div>
+  </div>
+</body>
+</html>

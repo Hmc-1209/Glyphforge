@@ -1,3 +1,129 @@
+/* =============================================== */
+/* COLOR THEME SYSTEM */
+/* =============================================== */
+
+/* Charcoal Theme (Default) */
+:root {
+  --bg-primary: #141414;
+  --bg-secondary: #1E1E1E;
+  --bg-tertiary: #282828;
+  --bg-card: linear-gradient(145deg, #1E1E1E 0%, #1a1a1a 100%);
+  --bg-card-solid: #1E1E1E;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.08);
+  
+  --border-primary: #404040;
+  --border-secondary: #353535;
+  --border-hover: #505050;
+  --border-active: #606060;
+  
+  --text-primary: #E0E0E0;
+  --text-secondary: #909090;
+  --text-muted: #666666;
+  
+  --accent-primary: #C8C8C8;
+  --accent-secondary: #A0A0A0;
+  --accent-hover: rgba(255, 255, 255, 0.15);
+  --accent-bg: rgba(255, 255, 255, 0.08);
+  --accent-bg-hover: rgba(255, 255, 255, 0.12);
+  
+  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(64, 64, 64, 0.5);
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
+  
+  --scrollbar-track: #1E1E1E;
+  --scrollbar-thumb: #404040;
+  --scrollbar-thumb-hover: #505050;
+  
+  /* Special colors */
+  --nsfw-pink: #e8a0b0;
+  --nsfw-pink-bg: rgba(232, 160, 176, 0.15);
+  --success-green: #4ade80;
+  --warning-orange: #fb923c;
+  --error-red: #f87171;
+  
+  /* Chart colors */
+  --chart-primary: #A0A0A0;
+  --chart-secondary: #707070;
+  --chart-tertiary: #505050;
+  --chart-grid: rgba(255, 255, 255, 0.1);
+  --chart-axis: #808080;
+  --chart-bar-1: #909090;
+  --chart-bar-2: #707070;
+  --chart-pie-1: #A0A0A0;
+  --chart-pie-2: #808080;
+  --chart-pie-3: #606060;
+  --chart-pie-4: #909090;
+  --chart-pie-5: #505050;
+  --chart-costume: #c0a090;
+  
+  /* Tooltip */
+  --tooltip-bg: rgba(30, 30, 30, 0.98);
+  --tooltip-border: rgba(80, 80, 80, 0.5);
+}
+
+/* Original Theme (Legacy Blue) */
+:root[data-theme="original"] {
+  --bg-primary: #12151c;
+  --bg-secondary: #1e222f;
+  --bg-tertiary: #181b26;
+  --bg-card: linear-gradient(145deg, #1e222f 0%, #181b26 100%);
+  --bg-card-solid: #1e222f;
+  --bg-hover: rgba(99, 130, 191, 0.1);
+  --bg-active: rgba(99, 130, 191, 0.15);
+  
+  --border-primary: rgba(99, 130, 191, 0.2);
+  --border-secondary: rgba(99, 130, 191, 0.15);
+  --border-hover: rgba(99, 130, 191, 0.3);
+  --border-active: rgba(99, 130, 191, 0.4);
+  
+  --text-primary: #e4e6eb;
+  --text-secondary: #9ca3b4;
+  --text-muted: #6b7280;
+  
+  --accent-primary: #6382bf;
+  --accent-secondary: #8ba4d0;
+  --accent-hover: rgba(99, 130, 191, 0.3);
+  --accent-bg: rgba(99, 130, 191, 0.2);
+  --accent-bg-hover: rgba(99, 130, 191, 0.3);
+  
+  --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(99, 130, 191, 0.1);
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.4);
+  
+  --scrollbar-track: rgba(31, 35, 50, 0.5);
+  --scrollbar-thumb: rgba(99, 130, 191, 0.5);
+  --scrollbar-thumb-hover: rgba(99, 130, 191, 0.7);
+  
+  /* Special colors */
+  --nsfw-pink: #e8a0b0;
+  --nsfw-pink-bg: rgba(232, 160, 176, 0.15);
+  --success-green: #22c55e;
+  --warning-orange: #f97316;
+  --error-red: #ef4444;
+  
+  /* Chart colors */
+  --chart-primary: #6382bf;
+  --chart-secondary: #8ba4d0;
+  --chart-tertiary: #4a5f8f;
+  --chart-grid: rgba(99, 130, 191, 0.2);
+  --chart-axis: #8ba4d0;
+  --chart-bar-1: #6382bf;
+  --chart-bar-2: #8ba4d0;
+  --chart-pie-1: #6382bf;
+  --chart-pie-2: #8ba4d0;
+  --chart-pie-3: #4a5f8f;
+  --chart-pie-4: #5a7bb3;
+  --chart-pie-5: #3d4f73;
+  --chart-costume: #e07a5f;
+  
+  /* Tooltip */
+  --tooltip-bg: rgba(35, 40, 55, 0.98);
+  --tooltip-border: rgba(99, 130, 191, 0.3);
+}
+
+/* =============================================== */
+/* BASE STYLES */
+/* =============================================== */
+
 * {
   margin: 0;
   padding: 0;
@@ -5,7 +131,7 @@
 }
 
 html {
-  background-color: #1a1d29;
+  background-color: var(--bg-primary, #141414);
 }
 
 body {
@@ -14,10 +140,10 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #1a1d29 0%, #252a3a 100%);
+  background: var(--bg-primary, #141414);
   background-attachment: fixed;
   min-height: 100vh;
-  color: #e4e6eb;
+  color: var(--text-primary, #E0E0E0);
 }
 
 #root {

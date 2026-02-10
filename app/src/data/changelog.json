@@ -1,5 +1,25 @@
 [
   {
+    "date": "2026-02-11",
+    "changes": [
+      {
+        "hash": "b4649a2",
+        "type": "feat",
+        "message": "Added Fn LoRA (Functional LoRA) tab - Browse and download functional/style LoRA models"
+      },
+      {
+        "hash": "b4649a2",
+        "type": "feat",
+        "message": "Fn LoRA supports title/sub-title display format, Type and Model filters"
+      },
+      {
+        "hash": "b4649a2",
+        "type": "feat",
+        "message": "Fn LoRA detail modal with version preview, prompt copy, and download features"
+      }
+    ]
+  },
+  {
     "date": "2026-02-01",
     "changes": [
       {

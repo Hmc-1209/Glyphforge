@@ -18,5 +18,9 @@
   "requestFolder": {
     "path": "/datas/requests",
     "name": "requests"
+  },
+  "workflowFolder": {
+    "path": "/datas/workflows",
+    "name": "workflows"
   }
 }

@@ -144,7 +144,7 @@ function StaticViewer({ album, onClose }) {
 
           {/* Empty State */}
           <div className="gallery-viewer-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ textAlign: 'center', color: '#9ca3af' }}>
+            <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
               <p>No images available</p>
             </div>
           </div>

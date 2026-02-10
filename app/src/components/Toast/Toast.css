@@ -14,10 +14,10 @@
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  background: #2a2e3e;
+  background: var(--bg-tertiary);
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1);
-  color: #e0e0e0;
+  color: var(--text-primary);
   animation: toast-slide-in 0.3s ease-out;
   backdrop-filter: blur(10px);
   min-width: 300px;
@@ -47,39 +47,39 @@
 }
 
 .toast-success {
-  border-left: 4px solid #4ade80;
+  border-left: 4px solid var(--success-green);
 }
 
 .toast-success .toast-icon {
   background: rgba(74, 222, 128, 0.2);
-  color: #4ade80;
+  color: var(--success-green);
 }
 
 .toast-error {
-  border-left: 4px solid #ef4444;
+  border-left: 4px solid var(--error-red);
 }
 
 .toast-error .toast-icon {
   background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  color: var(--error-red);
 }
 
 .toast-warning {
-  border-left: 4px solid #f59e0b;
+  border-left: 4px solid var(--warning-orange);
 }
 
 .toast-warning .toast-icon {
   background: rgba(245, 158, 11, 0.2);
-  color: #f59e0b;
+  color: var(--warning-orange);
 }
 
 .toast-info {
-  border-left: 4px solid #3b82f6;
+  border-left: 4px solid var(--accent-primary);
 }
 
 .toast-info .toast-icon {
   background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  color: var(--accent-primary);
 }
 
 .toast-message {
@@ -91,7 +91,7 @@
 .toast-close {
   background: none;
   border: none;
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 20px;
   cursor: pointer;
   padding: 0;
@@ -107,5 +107,5 @@
 
 .toast-close:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #e0e0e0;
+  color: var(--text-primary);
 }

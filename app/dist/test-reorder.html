@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Album Reorder API</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; font-size: 16px; }
+        .success { color: green; }
+        .error { color: red; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        #log { margin-top: 20px; }
+        .log-entry { padding: 5px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Album Reorder API</h1>
+        <p>這個頁面會測試 API 端點是否正常工作</p>
+
+        <button onclick="testGetAlbums()">1. 測試 GET /api/gallery/static</button>
+        <button onclick="testReorderEndpoint()">2. 測試 PUT /api/gallery/admin/static/reorder-albums</button>
+        <button onclick="clearLog()">清除日誌</button>
+
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const adminToken = localStorage.getItem('adminToken');
+        let albums = [];
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong> - ${message}`;
+            logDiv.appendChild(entry);
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        async function testGetAlbums() {
+            try {
+                log('🧪 測試 GET /api/gallery/static...');
+                const response = await fetch('/api/gallery/static');
+                log(`📥 Response status: ${response.status}`);
+
+                if (response.ok) {
+                    albums = await response.json();
+                    log(`✅ 成功！獲取到 ${albums.length} 個 albums`, 'success');
+                    log(`<pre>${JSON.stringify(albums.map(a => ({id: a.id, title: a.title, order: a.order})), null, 2)}</pre>`);
+                } else {
+                    log(`❌ 失敗: ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ 錯誤: ${error.message}`, 'error');
+            }
+        }
+
+        async function testReorderEndpoint() {
+            if (albums.length < 2) {
+                log('⚠️ 請先運行測試 1 獲取 albums', 'error');
+                return;
+            }
+
+            if (!adminToken) {
+                log('⚠️ 未找到 admin token，請先登入 admin', 'error');
+                return;
+            }
+
+            try {
+                // 測試數據：交換前兩個 album 的順序
+                const testData = [
+                    { id: albums[0].id, order: 1 },
+                    { id: albums[1].id, order: 0 }
+                ];
+
+                log('🧪 測試 PUT /api/gallery/admin/static/reorder-albums...');
+                log(`📤 發送數據: <pre>${JSON.stringify(testData, null, 2)}</pre>`);
+
+                const response = await fetch('/api/gallery/admin/static/reorder-albums', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${adminToken}`
+                    },
+                    body: JSON.stringify({ albums: testData })
+                });
+
+                log(`📥 Response status: ${response.status}`);
+
+                const result = await response.json();
+                log(`Response: <pre>${JSON.stringify(result, null, 2)}</pre>`);
+
+                if (response.ok) {
+                    log('✅ 成功！API 端點工作正常！', 'success');
+                } else {
+                    log(`❌ 失敗: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ 錯誤: ${error.message}`, 'error');
+            }
+        }
+
+        // 自動顯示 token 狀態
+        if (adminToken) {
+            log(`✅ 已找到 admin token`);
+        } else {
+            log(`⚠️ 未找到 admin token，請先在主頁面登入 admin`, 'error');
+        }
+    </script>
+</body>
+</html>

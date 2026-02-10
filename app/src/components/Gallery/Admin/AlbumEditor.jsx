@@ -434,7 +434,7 @@ function AlbumEditor({ type, album, onClose }) {
                 value={formData.id}
                 readOnly
                 disabled
-                style={{ background: '#2a2e3e', cursor: 'not-allowed' }}
+                style={{ background: 'var(--bg-tertiary)', cursor: 'not-allowed' }}
               />
               <small>Auto-generated unique identifier</small>
             </div>

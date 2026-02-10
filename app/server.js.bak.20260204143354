@@ -14,6 +14,41 @@ import http from 'http'
 
 dotenv.config()
 
+// Synology Drive Sync Trigger Helper
+// Calls the host sync-server to trigger inotify events
+const SYNC_TRIGGER_HOST = process.env.SYNC_TRIGGER_HOST || '172.17.0.1'
+const SYNC_TRIGGER_PORT = process.env.SYNC_TRIGGER_PORT || 3099
+
+function triggerSync(relativePaths) {
+  if (!Array.isArray(relativePaths)) relativePaths = [relativePaths]
+  
+  const postData = JSON.stringify({ paths: relativePaths })
+  const options = {
+    hostname: SYNC_TRIGGER_HOST,
+    port: SYNC_TRIGGER_PORT,
+    path: '/sync',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData)
+    },
+    timeout: 2000
+  }
+
+  const req = http.request(options, (res) => {
+    if (res.statusCode === 200) {
+      console.log('Sync triggered for:', relativePaths)
+    }
+  })
+  
+  req.on('error', (e) => {
+    // Silent fail - don't break the main operation if sync trigger fails
+    console.log('Sync trigger unavailable:', e.message)
+  })
+  
+  req.write(postData)
+  req.end()
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -76,30 +111,11 @@ async function sendWebhookNotification(eventType, data) {
     // Format message for Clawdbot
     let message = ''
     if (eventType === 'new_request') {
-      const lines = [
-        `🎨 **GlyphForge 收到新的 Request！**`,
-        ``,
-        `📝 類型: ${data.type === 'lora' ? 'LoRA 訓練' : data.type}`,
-        `👤 角色: ${data.characterName || '未指定'}`,
-      ]
-      
-      if (data.outfit) lines.push(`👗 服裝: ${data.outfit}`)
-      if (data.notes) lines.push(`💬 備註: ${data.notes}`)
-      
-      lines.push(`🔖 ID: \`${data.id}\``)
-      lines.push(``)
-      
-      // Add links section if any
-      const links = []
-      if (data.channelLink) links.push(`📺 [頻道](${data.channelLink})`)
-      if (data.socialMediaLink) links.push(`🐦 [社群](${data.socialMediaLink})`)
-      if (data.livestreamArchive) links.push(`🎬 [直播存檔](${data.livestreamArchive})`)
-      
-      if (links.length > 0) {
-        lines.push(`🔗 相關連結: ${links.join(' | ')}`)
-      }
-      
-      message = lines.join('\n')
+      message = `🎨 GlyphForge 收到新的 Request！\n` +
+        `📝 類型: ${data.type}\n` +
+        `👤 角色: ${data.characterName || '未指定'}\n` +
+        `💬 備註: ${data.notes || '無'}\n` +
+        `🔗 ID: ${data.id}`
     } else {
       message = `GlyphForge Event: ${eventType}\n${JSON.stringify(data, null, 2)}`
     }
@@ -445,6 +461,8 @@ app.put('/api/costumes/metadata', authMiddleware, (req, res) => {
     
     fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync('costumes/metadata.json')
 
     res.json({ success: true, metadata })
   } catch (error) {
@@ -687,6 +705,8 @@ app.post('/api/costumes', authMiddleware, (req, res) => {
     }
     fs.writeFileSync(path.join(newFolderPath, 'meta.json'), JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`costumes/${nextId}`)
 
     res.json({
       success: true,
@@ -741,6 +761,8 @@ app.put('/api/costumes/:id', authMiddleware, (req, res) => {
 
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`costumes/${id}`)
 
     res.json({ success: true, message: 'Costume updated successfully' })
   } catch (error) {
@@ -837,6 +859,8 @@ app.post('/api/costumes/:id/image/:imageIndex', authMiddleware, costumeUpload.si
       return `/${COSTUME_FOLDER_NAME}/${id}/${file}?v=${mtime}`
     })
 
+    // Trigger Synology Drive sync
+    triggerSync(`costumes/${id}/${newFilename}`)
 
     res.json({
       success: true,
@@ -886,182 +910,6 @@ app.post('/api/loras/:id/download', (req, res) => {
     }
   } catch (error) {
     console.error('Error updating LoRA download count:', error)
-    res.status(500).json({ error: 'Failed to update download count' })
-  }
-})
-
-// ============================================
-// FUNCTIONAL LORA API
-// ============================================
-
-// API route - get all functional LoRAs
-app.get('/api/fn-loras', async (req, res) => {
-  try {
-    const fnLoraFolderPath = path.join(LORA_FOLDER_PATH, 'functional')
-
-    // Check if functional folder exists
-    if (!fs.existsSync(fnLoraFolderPath)) {
-      console.log('Functional LoRA folder not found, creating:', fnLoraFolderPath)
-      fs.mkdirSync(fnLoraFolderPath, { recursive: true })
-      return res.json([])
-    }
-
-    const folders = fs.readdirSync(fnLoraFolderPath).filter(file => {
-      const filePath = path.join(fnLoraFolderPath, file)
-      return fs.statSync(filePath).isDirectory() && !file.startsWith('@')
-    })
-
-    const fnLoras = folders.map(folder => {
-      const folderPath = path.join(fnLoraFolderPath, folder)
-      const metaPath = path.join(folderPath, 'meta.json')
-      const thumbnailPath = path.join(folderPath, '0.png')
-
-      // Read meta.json
-      let meta = {
-        type: '',
-        link: '',
-        prompt: '',
-        'serial-number': 0
-      }
-      if (fs.existsSync(metaPath)) {
-        try {
-          const metaData = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
-          meta = { ...meta, ...metaData }
-        } catch (error) {
-          console.error(`Error reading meta.json for ${folder}:`, error)
-        }
-      }
-
-      // Find all .safetensors files
-      const files = fs.readdirSync(folderPath)
-      const safetensorsFiles = files.filter(file => file.endsWith('.safetensors'))
-
-      // Process model information
-      let modelInfo = meta.model || ''
-      let modelMap = {}
-
-      if (Array.isArray(meta.model)) {
-        meta.model.forEach(m => {
-          const key = m.name.toLowerCase()
-          modelMap[key] = `${m.name} ${m.version}`
-        })
-        modelInfo = meta.model.map(m => `${m.name} ${m.version}`).join(', ')
-      }
-
-      // Extract version information from filenames
-      const versions = safetensorsFiles.map(file => {
-        const match = file.match(/\(([^)]+)\)\.safetensors$/)
-        const versionName = match ? match[1] : 'default'
-
-        let displayName = versionName
-        if (Object.keys(modelMap).length > 0) {
-          const modelKey = versionName.toLowerCase()
-          displayName = modelMap[modelKey] || versionName
-        }
-
-        // Find images for this specific version
-        const versionImages = []
-        const allFiles = fs.readdirSync(folderPath)
-
-        for (let i = 1; i <= 10; i++) {
-          const imageFileName = `${i}(${versionName}).png`
-          if (allFiles.includes(imageFileName)) {
-            const imagePath = path.join(folderPath, imageFileName)
-            const mtime = fs.statSync(imagePath).mtimeMs.toString(36)
-            versionImages.push(`/${LORA_FOLDER_NAME}/functional/${folder}/${imageFileName}?v=${mtime}`)
-          }
-        }
-
-        if (versionImages.length === 0) {
-          for (let i = 1; i <= 10; i++) {
-            const imageFileName = `${i}.png`
-            if (allFiles.includes(imageFileName)) {
-              const imagePath = path.join(folderPath, imageFileName)
-              const mtime = fs.statSync(imagePath).mtimeMs.toString(36)
-              versionImages.push(`/${LORA_FOLDER_NAME}/functional/${folder}/${imageFileName}?v=${mtime}`)
-            }
-          }
-        }
-
-        return {
-          name: versionName,
-          displayName: displayName,
-          fileName: file,
-          filePath: `/${LORA_FOLDER_NAME}/functional/${folder}/${file}`,
-          images: versionImages
-        }
-      })
-
-      const defaultVersion = versions[0] || { name: '', displayName: '', fileName: '', filePath: '' }
-      const thumbnailMtime = fs.existsSync(thumbnailPath) ? fs.statSync(thumbnailPath).mtimeMs.toString(36) : ''
-
-      return {
-        id: folder,
-        name: folder,
-        title: meta.title || folder,
-        subTitle: meta['sub-title'] || '',
-        thumbnail: fs.existsSync(thumbnailPath) ? `/${LORA_FOLDER_NAME}/functional/${folder}/0.png?v=${thumbnailMtime}` : '',
-        link: meta.link || '',
-        prompt: meta.prompt || '',
-        safetensorsFile: defaultVersion.fileName,
-        safetensorsPath: defaultVersion.filePath,
-        versions: versions,
-        hasMultipleVersions: versions.length > 1,
-        type: meta.type || '',
-        model: modelInfo,
-        modelRaw: Array.isArray(meta.model) ? meta.model : [],
-        serialNumber: meta['serial-number'] || 0,
-        copyCount: meta.copyCount || 0,
-        downloadCount: meta.downloadCount || 0
-      }
-    })
-
-    // Sort by serial number
-    fnLoras.sort((a, b) => a.serialNumber - b.serialNumber)
-
-    res.json(fnLoras)
-  } catch (error) {
-    console.error('Error reading Functional LoRAs:', error)
-    res.status(500).json({ error: 'Failed to load Functional LoRAs' })
-  }
-})
-
-// API route - increment Fn LoRA copy count
-app.post('/api/fn-loras/:id/copy', (req, res) => {
-  try {
-    const { id } = req.params
-    const metaPath = path.join(LORA_FOLDER_PATH, 'functional', id, 'meta.json')
-
-    if (fs.existsSync(metaPath)) {
-      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
-      meta.copyCount = (meta.copyCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
-      res.json({ success: true, copyCount: meta.copyCount })
-    } else {
-      res.status(404).json({ error: 'Meta file not found' })
-    }
-  } catch (error) {
-    console.error('Error updating Fn LoRA copy count:', error)
-    res.status(500).json({ error: 'Failed to update copy count' })
-  }
-})
-
-// API route - increment Fn LoRA download count
-app.post('/api/fn-loras/:id/download', (req, res) => {
-  try {
-    const { id } = req.params
-    const metaPath = path.join(LORA_FOLDER_PATH, 'functional', id, 'meta.json')
-
-    if (fs.existsSync(metaPath)) {
-      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
-      meta.downloadCount = (meta.downloadCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
-      res.json({ success: true, downloadCount: meta.downloadCount })
-    } else {
-      res.status(404).json({ error: 'Meta file not found' })
-    }
-  } catch (error) {
-    console.error('Error updating Fn LoRA download count:', error)
     res.status(500).json({ error: 'Failed to update download count' })
   }
 })
@@ -1163,6 +1011,8 @@ app.post('/api/loras', authMiddleware, (req, res) => {
 
     fs.writeFileSync(path.join(loraPath, 'meta.json'), JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`LoRA/character/${folderName}`)
 
     res.json({ 
       success: true, 
@@ -1204,6 +1054,8 @@ app.put('/api/loras/:id', authMiddleware, (req, res) => {
 
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`LoRA/character/${id}`)
 
     res.json({ success: true, meta })
   } catch (error) {
@@ -1224,6 +1076,8 @@ app.delete('/api/loras/:id', authMiddleware, (req, res) => {
 
     fs.rmSync(loraPath, { recursive: true, force: true })
     
+    // Trigger Synology Drive sync for parent directory
+    triggerSync('LoRA/character')
 
     res.json({ success: true })
   } catch (error) {
@@ -1259,6 +1113,8 @@ app.post('/api/loras/:id/image/:imageIndex', authMiddleware, loraImageUpload.sin
       fs.unlinkSync(tempPath)
     }
 
+    // Trigger Synology Drive sync
+    triggerSync(`LoRA/character/${id}/${req.file.filename}`)
 
     res.json({ 
       success: true, 
@@ -1575,6 +1431,8 @@ app.post('/api/prompts', authMiddleware, (req, res) => {
     }
     fs.writeFileSync(path.join(newFolderPath, 'meta.json'), JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`prompts/${nextId}`)
 
     // Create placeholder images (1.png will be required to upload)
     res.json({
@@ -1664,6 +1522,8 @@ app.put('/api/prompts/:id', authMiddleware, (req, res) => {
 
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`prompts/${id}`)
 
     res.json({ success: true, message: 'Prompt updated successfully' })
   } catch (error) {
@@ -1733,6 +1593,8 @@ app.post('/api/prompts/:id/image/:imageIndex', authMiddleware, promptUpload.sing
       return `/${PROMPT_FOLDER_NAME}/${id}/${file}?v=${mtime}`
     })
 
+    // Trigger Synology Drive sync
+    triggerSync(`prompts/${id}/${newFilename}`)
 
     res.json({
       success: true,
@@ -2078,6 +1940,8 @@ app.post('/api/gallery/admin/:type/:albumId/upload',
       const { type, albumId } = req.params
       const uploadedFiles = req.files.map(file => file.filename)
 
+      // Trigger Synology Drive sync
+      triggerSync(`gallery/${type}/${albumId}`)
 
       // Return uploaded filenames immediately
       res.json({
@@ -2113,6 +1977,8 @@ app.post('/api/gallery/admin/:type/create', authMiddleware, async (req, res) => 
     // Create meta.json
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`gallery/${type}/${id}`)
 
     res.json({ success: true, id })
   } catch (error) {
@@ -2173,6 +2039,8 @@ app.put('/api/gallery/admin/:type/reorder-albums', authMiddleware, async (req, r
       console.log(`⚠️ [REORDER-ALBUMS] Albums not found:`, notFoundAlbums)
     }
 
+    // Trigger Synology Drive sync
+    triggerSync(`gallery/${type}`)
 
     res.json({ success: true, updatedCount, notFoundAlbums })
   } catch (error) {
@@ -2195,6 +2063,8 @@ app.put('/api/gallery/admin/:type/:id', authMiddleware, async (req, res) => {
 
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`gallery/${type}/${id}`)
 
     res.json({ success: true })
   } catch (error) {
@@ -2216,6 +2086,8 @@ app.delete('/api/gallery/admin/:type/:id', authMiddleware, async (req, res) => {
     // Delete directory and all contents
     fs.rmSync(albumPath, { recursive: true, force: true })
 
+    // Trigger Synology Drive sync
+    triggerSync(`gallery/${type}`)
 
     res.json({ success: true })
   } catch (error) {
@@ -2263,6 +2135,8 @@ app.delete('/api/gallery/admin/:type/:id/image', authMiddleware, async (req, res
     // Update meta.json
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`gallery/${type}/${id}`)
 
     res.json({ success: true, images: meta.images })
   } catch (error) {
@@ -2314,6 +2188,8 @@ app.put('/api/gallery/admin/:type/:id/reorder', authMiddleware, async (req, res)
     // Update meta.json
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`gallery/${type}/${id}`)
 
     console.log('✅ [REORDER] Successfully saved new order')
 
@@ -2517,6 +2393,8 @@ app.post('/api/requests', (req, res) => {
     const metaPath = path.join(requestPath, 'meta.json')
     fs.writeFileSync(metaPath, JSON.stringify(newRequest, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`requests/${id}`)
 
     // Send webhook notification for new request
     sendWebhookNotification('new_request', newRequest)
@@ -2545,6 +2423,8 @@ app.put('/api/requests/:id/status', verifyToken, (req, res) => {
 
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`requests/${id}`)
 
     res.json(meta)
   } catch (error) {
@@ -2577,6 +2457,8 @@ app.put('/api/requests/:id', verifyToken, (req, res) => {
 
     fs.writeFileSync(metaPath, JSON.stringify(updatedMeta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`requests/${id}`)
 
     res.json(updatedMeta)
   } catch (error) {
@@ -2598,6 +2480,8 @@ app.delete('/api/requests/:id', verifyToken, (req, res) => {
     // Delete entire folder
     fs.rmSync(requestPath, { recursive: true, force: true })
 
+    // Trigger Synology Drive sync
+    triggerSync('requests')
 
     res.json({ success: true })
   } catch (error) {
@@ -2748,6 +2632,8 @@ app.post('/api/workflows', authMiddleware, (req, res) => {
 
     fs.writeFileSync(path.join(workflowPath, 'meta.json'), JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`workflows/${id}`)
 
     res.json(meta)
   } catch (error) {
@@ -2780,6 +2666,8 @@ app.put('/api/workflows/:id', authMiddleware, (req, res) => {
 
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`workflows/${id}`)
 
     res.json(meta)
   } catch (error) {
@@ -2800,6 +2688,8 @@ app.delete('/api/workflows/:id', authMiddleware, (req, res) => {
 
     fs.rmSync(workflowPath, { recursive: true, force: true })
 
+    // Trigger Synology Drive sync
+    triggerSync('workflows')
 
     res.json({ success: true })
   } catch (error) {
@@ -2833,6 +2723,8 @@ app.put('/api/workflows/reorder', authMiddleware, (req, res) => {
       return meta
     }).filter(Boolean)
 
+    // Trigger Synology Drive sync
+    triggerSync('workflows')
 
     res.json(workflows)
   } catch (error) {
@@ -2883,6 +2775,8 @@ app.post('/api/workflows/:id/upload', authMiddleware, workflowUpload.single('fil
 
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
+    // Trigger Synology Drive sync
+    triggerSync(`workflows/${id}`)
 
     res.json({ success: true, filename, meta })
   } catch (error) {
@@ -2917,6 +2811,8 @@ app.delete('/api/workflows/:id/file/:filename', authMiddleware, (req, res) => {
       fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
     }
 
+    // Trigger Synology Drive sync
+    triggerSync(`workflows/${id}`)
 
     res.json({ success: true })
   } catch (error) {

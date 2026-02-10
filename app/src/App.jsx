@@ -1,14 +1,64 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import './App.css'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import Gallery from './components/Gallery/Gallery'
 import Request from './components/Request/Request'
 import Changelog from './components/Changelog/Changelog'
+import Workflow from './components/Workflow/Workflow'
 import AdminLogin from './components/Gallery/Admin/AdminLogin'
 import { useDataCache } from './hooks/useDataCache'
 import { ToastProvider } from './components/Toast/ToastContext'
 
+// Helper to get CSS variable value
+const getCSSVar = (name) => {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+// Theme colors hook
+const useThemeColors = () => {
+  const [colors, setColors] = useState({})
+  
+  useEffect(() => {
+    const updateColors = () => {
+      setColors({
+        textPrimary: getCSSVar('--text-primary') || '#E0E0E0',
+        textSecondary: getCSSVar('--text-secondary') || '#909090',
+        textMuted: getCSSVar('--text-muted') || '#666666',
+        chartPrimary: getCSSVar('--chart-primary') || '#A0A0A0',
+        chartSecondary: getCSSVar('--chart-secondary') || '#707070',
+        chartGrid: getCSSVar('--chart-grid') || 'rgba(255, 255, 255, 0.1)',
+        chartAxis: getCSSVar('--chart-axis') || '#808080',
+        chartBar1: getCSSVar('--chart-bar-1') || '#909090',
+        chartBar2: getCSSVar('--chart-bar-2') || '#707070',
+        chartPie1: getCSSVar('--chart-pie-1') || '#A0A0A0',
+        chartPie2: getCSSVar('--chart-pie-2') || '#808080',
+        chartPie3: getCSSVar('--chart-pie-3') || '#606060',
+        chartPie4: getCSSVar('--chart-pie-4') || '#909090',
+        chartPie5: getCSSVar('--chart-pie-5') || '#505050',
+        chartCostume: getCSSVar('--chart-costume') || '#c0a090',
+        tooltipBg: getCSSVar('--tooltip-bg') || 'rgba(30, 30, 30, 0.98)',
+        tooltipBorder: getCSSVar('--tooltip-border') || 'rgba(80, 80, 80, 0.5)',
+        successGreen: getCSSVar('--success-green') || '#4ade80',
+        warningOrange: getCSSVar('--warning-orange') || '#fb923c',
+        errorRed: getCSSVar('--error-red') || '#f87171',
+      })
+    }
+    
+    updateColors()
+    // Re-read colors if theme changes
+    const observer = new MutationObserver(updateColors)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    
+    return () => observer.disconnect()
+  }, [])
+  
+  return colors
+}
+
 function App() {
+  // Theme colors for charts
+  const themeColors = useThemeColors()
+  
   const [activeTab, setActiveTab] = useState(() => {
     // Load from localStorage, default to 'lora' for new users
     return localStorage.getItem('activeTab') || 'lora'
@@ -57,6 +107,23 @@ function App() {
   const [isCreatingCostume, setIsCreatingCostume] = useState(false)
   const [editCostumeData, setEditCostumeData] = useState(null)
   const [pendingCostumeImages, setPendingCostumeImages] = useState([null, null])
+
+  // LoRA edit mode
+  const [isEditingLora, setIsEditingLora] = useState(false)
+  const [isCreatingLora, setIsCreatingLora] = useState(false)
+  const [editLoraData, setEditLoraData] = useState(null)
+  const [pendingLoraThumbnail, setPendingLoraThumbnail] = useState(null) // 0.png (shared)
+  const [pendingLoraVersionImages, setPendingLoraVersionImages] = useState({}) // { 'illustrious': [file1, file2], 'haruka': [file1, file2] }
+  const [editLoraSelectedVersion, setEditLoraSelectedVersion] = useState(0) // index of selected model version
+  const loraImageInputRef = useRef(null)
+  const [uploadingLoraImageIndex, setUploadingLoraImageIndex] = useState(null)
+
+  // Fn LoRA state
+  const [fnLoraTypeFilter, setFnLoraTypeFilter] = useState('all')
+  const [fnLoraModelFilter, setFnLoraModelFilter] = useState('all')
+  const [isFnLoraFilterExpanded, setIsFnLoraFilterExpanded] = useState(false)
+  const [selectedFnLora, setSelectedFnLora] = useState(null)
+  const [selectedFnLoraVersion, setSelectedFnLoraVersion] = useState(0)
 
   // Costume category state
   const [collapsedCostumeTypes, setCollapsedCostumeTypes] = useState(() => {
@@ -143,8 +210,19 @@ function App() {
     }
   })
 
+  const fnLorasCache = useDataCache('fnLoras', async () => {
+    try {
+      const response = await fetch('/api/fn-loras')
+      return await response.json()
+    } catch (error) {
+      console.error('Failed to load Functional LoRAs:', error)
+      return []
+    }
+  })
+
   const prompts = promptsCache.data || []
   const loras = lorasCache.data || []
+  const fnLoras = fnLorasCache.data || []
   const costumesData = costumesCache.data || { costumes: [], metadata: { typeOrder: [], costumeOrder: {} } }
   const costumes = costumesData.costumes || []
   const costumeMetadata = costumesData.metadata || { typeOrder: [], costumeOrder: {} }
@@ -553,7 +631,8 @@ function App() {
     setEditCostumeData({
       ...costume,
       editedTitle: costume.title || '',
-      editedPrompt: costume.prompt,
+      editedCostumePrompt: costume.costumePrompt || '',  // Pure costume prompt
+      editedPrompt: costume.prompt,  // Scene prompt
       editedCharacter: costume.character || 1,
       editedPlace: costume.place || 'Unknown',
       editedSensitive: costume.sensitive || 'SFW',
@@ -572,7 +651,8 @@ function App() {
     setEditCostumeData({
       id: null,
       editedTitle: '',
-      editedPrompt: '',
+      editedCostumePrompt: '',  // Pure costume prompt
+      editedPrompt: '',  // Scene prompt
       editedCharacter: 1,
       editedPlace: '',
       editedSensitive: 'SFW',
@@ -625,7 +705,8 @@ function App() {
           },
           body: JSON.stringify({
             title: editCostumeData.editedTitle,
-            prompt: editCostumeData.editedPrompt,
+            costumePrompt: editCostumeData.editedCostumePrompt,  // Pure costume prompt
+            prompt: editCostumeData.editedPrompt,  // Scene prompt
             character: parseInt(editCostumeData.editedCharacter),
             place: editCostumeData.editedPlace,
             sensitive: editCostumeData.editedSensitive,
@@ -655,7 +736,8 @@ function App() {
           },
           body: JSON.stringify({
             title: editCostumeData.editedTitle,
-            prompt: editCostumeData.editedPrompt,
+            costumePrompt: editCostumeData.editedCostumePrompt,  // Pure costume prompt
+            prompt: editCostumeData.editedPrompt,  // Scene prompt
             character: parseInt(editCostumeData.editedCharacter),
             place: editCostumeData.editedPlace,
             sensitive: editCostumeData.editedSensitive,
@@ -750,6 +832,214 @@ function App() {
         })
       } catch (error) {
         console.error(`Failed to upload costume image ${i + 1}:`, error)
+      }
+    }
+  }
+
+  // LoRA admin handlers
+  const handleLoraAdminClick = () => {
+    if (!isLoggedIn) {
+      setShowPromptLogin(true)
+    } else {
+      setAdminMode(!adminMode)
+    }
+  }
+
+  const handleEditLora = (lora) => {
+    // Use modelRaw (original array from meta.json) if available
+    const modelArray = Array.isArray(lora.modelRaw) && lora.modelRaw.length > 0 
+      ? lora.modelRaw 
+      : (lora.versions?.map(v => ({ name: v.name, version: '' })) || [])
+    
+    setEditLoraData({
+      ...lora,
+      editedCharacter: lora.character || '',
+      editedCloth: lora.cloth || '',
+      editedCompany: lora.company || '',
+      editedGroup: lora.group || '',
+      editedGender: lora.gender || 'Girl',
+      editedModel: modelArray,
+      editedModelJson: JSON.stringify(modelArray, null, 2),
+      editedLink: lora.link || '',
+      editedPrompt: lora.prompt || ''
+    })
+    setPendingLoraThumbnail(null)
+    setPendingLoraVersionImages({})
+    setEditLoraSelectedVersion(0)
+    setIsEditingLora(true)
+    setIsCreatingLora(false)
+  }
+
+  const handleCreateLora = () => {
+    const defaultModel = [{ name: 'Illustrious', version: 'v2.0' }]
+    setEditLoraData({
+      id: null,
+      editedCharacter: '',
+      editedCloth: '',
+      editedCompany: '',
+      editedGroup: '',
+      editedGender: 'Girl',
+      editedModel: defaultModel,
+      editedModelJson: JSON.stringify(defaultModel, null, 2),
+      editedLink: '',
+      editedPrompt: ''
+    })
+    setPendingLoraThumbnail(null)
+    setPendingLoraVersionImages({})
+    setEditLoraSelectedVersion(0)
+    setIsEditingLora(true)
+    setIsCreatingLora(true)
+  }
+
+  const handleCloseEditLora = () => {
+    setIsEditingLora(false)
+    setIsCreatingLora(false)
+    setEditLoraData(null)
+    setPendingLoraThumbnail(null)
+    setPendingLoraVersionImages({})
+    setEditLoraSelectedVersion(0)
+  }
+
+  const handleUpdateLora = async () => {
+    if (!editLoraData) return
+
+    if (!editLoraData.editedCharacter) {
+      alert('Please enter a character name')
+      return
+    }
+
+    // Parse model JSON if it was edited
+    let modelData = editLoraData.editedModel
+    if (editLoraData.editedModelJson) {
+      try {
+        modelData = JSON.parse(editLoraData.editedModelJson)
+      } catch (e) {
+        alert('Invalid model JSON format')
+        return
+      }
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+
+      let loraId = editLoraData.id
+
+      if (isCreatingLora) {
+        // Create new LoRA
+        const response = await fetch('/api/loras', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            character: editLoraData.editedCharacter,
+            cloth: editLoraData.editedCloth,
+            company: editLoraData.editedCompany,
+            group: editLoraData.editedGroup,
+            gender: editLoraData.editedGender,
+            model: modelData,
+            link: editLoraData.editedLink,
+            prompt: editLoraData.editedPrompt
+          })
+        })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error)
+        loraId = data.id
+      } else {
+        // Update existing LoRA
+        const response = await fetch(`/api/loras/${loraId}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            character: editLoraData.editedCharacter,
+            cloth: editLoraData.editedCloth,
+            company: editLoraData.editedCompany,
+            group: editLoraData.editedGroup,
+            gender: editLoraData.editedGender,
+            model: modelData,
+            link: editLoraData.editedLink,
+            prompt: editLoraData.editedPrompt
+          })
+        })
+        if (!response.ok) throw new Error('Failed to update LoRA')
+      }
+
+      // Upload thumbnail (0.png) - shared across versions
+      if (pendingLoraThumbnail) {
+        const formData = new FormData()
+        formData.append('image', pendingLoraThumbnail)
+        await fetch(`/api/loras/${loraId}/image/0`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        })
+      }
+
+      // Upload version-specific images
+      for (const [versionName, images] of Object.entries(pendingLoraVersionImages)) {
+        for (let i = 0; i < images.length; i++) {
+          if (images[i]) {
+            const formData = new FormData()
+            formData.append('image', images[i])
+            formData.append('version', versionName.toLowerCase())
+            await fetch(`/api/loras/${loraId}/image/${i + 1}`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+              body: formData
+            })
+          }
+        }
+      }
+
+      // Refresh LoRA list
+      await lorasCache.loadData(true)
+
+      handleCloseEditLora()
+    } catch (error) {
+      console.error('Error saving LoRA:', error)
+      alert('Failed to save LoRA: ' + error.message)
+    }
+  }
+
+  const handleDeleteLora = async () => {
+    if (!editLoraData || !editLoraData.id) return
+    if (!confirm('Are you sure you want to delete this LoRA?')) return
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      const response = await fetch(`/api/loras/${editLoraData.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (!response.ok) throw new Error('Failed to delete LoRA')
+
+      // Refresh LoRA list
+      await lorasCache.loadData(true)
+
+      handleCloseEditLora()
+    } catch (error) {
+      console.error('Error deleting LoRA:', error)
+      alert('Failed to delete LoRA: ' + error.message)
+    }
+  }
+
+  const handleLoraImageSelect = (index, file) => {
+    if (index === 0) {
+      // Thumbnail (shared)
+      setPendingLoraThumbnail(file)
+    } else {
+      // Version-specific image (1 or 2)
+      const currentModel = editLoraData?.editedModel?.[editLoraSelectedVersion]
+      if (currentModel) {
+        const versionName = currentModel.name.toLowerCase()
+        setPendingLoraVersionImages(prev => {
+          const versionImages = prev[versionName] || [null, null]
+          const newVersionImages = [...versionImages]
+          newVersionImages[index - 1] = file // index 1 -> array[0], index 2 -> array[1]
+          return { ...prev, [versionName]: newVersionImages }
+        })
       }
     }
   }
@@ -1079,17 +1369,16 @@ function App() {
   }
 
   // First filter by sensitivity (top-level filter)
+  // SFW = only SFW content, ALL = SFW + NSFW (everything)
   const sensitivityFilteredPrompts = prompts.filter(p => {
     if (sensitivityFilter === 'sfw') return p.sensitive === 'SFW'
-    if (sensitivityFilter === 'nsfw') return p.sensitive === 'NSFW'
-    return true // 'all' shows both
+    return true // 'all' shows everything (SFW + NSFW)
   })
 
   // Filter costumes by sensitivity
   const sensitivityFilteredCostumes = costumes.filter(c => {
     if (sensitivityFilter === 'sfw') return c.sensitive === 'SFW'
-    if (sensitivityFilter === 'nsfw') return c.sensitive === 'NSFW'
-    return true // 'all' shows both
+    return true // 'all' shows everything (SFW + NSFW)
   })
 
   // Get unique values for each filter based on sensitivity-filtered prompts
@@ -1157,25 +1446,111 @@ function App() {
 
   const filteredLoras = filteredAndSortedLoras
 
+  // Fn LoRA helpers
+  const getFnLoraUniqueValues = (field) => {
+    const values = new Set(
+      fnLoras
+        .map(l => l[field])
+        .filter(v => v && v !== '' && v !== 'Unknown')
+    )
+    return Array.from(values).sort()
+  }
+
+  // Filter Fn LoRAs based on active filters
+  const filteredFnLoras = fnLoras.filter(l => {
+    const typeMatch = fnLoraTypeFilter === 'all' || l.type === fnLoraTypeFilter
+    const modelMatch = fnLoraModelFilter === 'all' || l.model === fnLoraModelFilter
+    return typeMatch && modelMatch
+  })
+
+  // Fn LoRA filter render helper
+  const renderFnLoraFilter = (label, filterId, currentValue, setValue, options, getLabel) => {
+    const isOpen = openDropdown === `fnlora-${filterId}`
+
+    return (
+      <div className="filter-row">
+        <label>{label}:</label>
+        <div className="custom-select-wrapper">
+          <div
+            className="custom-select"
+            onClick={() => setOpenDropdown(isOpen ? null : `fnlora-${filterId}`)}
+          >
+            <div className="custom-select-trigger">
+              <span>{getLabel(currentValue)}</span>
+              <svg className="custom-select-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+            {isOpen && (
+              <div className="custom-select-options">
+                <div
+                  className={`custom-select-option ${currentValue === 'all' ? 'selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setValue('all')
+                    setOpenDropdown(null)
+                  }}
+                >
+                  All ({fnLoras.length})
+                </div>
+                {options.map(option => (
+                  <div
+                    key={option}
+                    className={`custom-select-option ${currentValue === option.toString() ? 'selected' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setValue(option.toString())
+                      setOpenDropdown(null)
+                    }}
+                  >
+                    {getLabel(option)} ({fnLoras.filter(l => l[filterId] ? l[filterId].toString() === option.toString() : false).length})
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <ToastProvider>
       <div className="app-container">
       {/* Floating Sensitivity Toggle */}
-      <div className="sensitivity-toggle-container">
+      <div className={`sensitivity-toggle-container ${sensitivityFilter === 'all' ? 'nsfw-active' : ''}`}>
         <span className="sensitivity-label">Safety Switch</span>
-        <div className="sensitivity-toggle">
-          <button
-            className={`toggle-option ${sensitivityFilter === 'sfw' ? 'active' : ''}`}
-            onClick={() => setSensitivityFilter('sfw')}
-          ></button>
-          <button
-            className={`toggle-option ${sensitivityFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setSensitivityFilter('all')}
-          ></button>
-          <button
-            className={`toggle-option ${sensitivityFilter === 'nsfw' ? 'active' : ''}`}
-            onClick={() => setSensitivityFilter('nsfw')}
-          ></button>
+        <div 
+          className={`sensitivity-toggle ${sensitivityFilter === 'all' ? 'nsfw-mode' : ''}`}
+          onClick={() => setSensitivityFilter(sensitivityFilter === 'sfw' ? 'all' : 'sfw')}
+        >
+          {/* Womb Tattoo Icon - Inside toggle, left side */}
+          <div className={`womb-tattoo-icon ${sensitivityFilter === 'all' ? 'visible' : ''}`}>
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Womb tattoo design - traditional style */}
+              {/* Main inverted heart/womb shape */}
+              <path d="M20 4 C14 4 8 8 8 14 C8 20 14 28 20 36 C26 28 32 20 32 14 C32 8 26 4 20 4Z" 
+                fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.9"/>
+              {/* Inner womb shape */}
+              <path d="M20 8 C16 8 12 11 12 15 C12 19 16 25 20 30 C24 25 28 19 28 15 C28 11 24 8 20 8Z" 
+                fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.7"/>
+              {/* Central vertical line with diamond */}
+              <path d="M20 12 L20 26" stroke="currentColor" strokeWidth="0.8" opacity="0.8"/>
+              <path d="M20 10 L22 13 L20 16 L18 13 Z" fill="currentColor" opacity="0.6"/>
+              {/* Decorative side curves */}
+              <path d="M14 12 Q10 16 14 20" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.6"/>
+              <path d="M26 12 Q30 16 26 20" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.6"/>
+              {/* Bottom decorative element */}
+              <path d="M16 22 Q20 26 24 22" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.7"/>
+              {/* Top wing curves */}
+              <path d="M12 8 Q8 4 4 6" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.5"/>
+              <path d="M28 8 Q32 4 36 6" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.5"/>
+              {/* Small accent dots */}
+              <circle cx="20" cy="19" r="1.2" fill="currentColor" opacity="0.8"/>
+              <circle cx="16" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
+              <circle cx="24" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
+            </svg>
+          </div>
           <div className={`toggle-slider ${sensitivityFilter}`}></div>
         </div>
       </div>
@@ -1221,6 +1596,15 @@ function App() {
                   LoRA
                 </button>
                 <button
+                  className={`sidebar-tab ${activeTab === 'fnlora' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('fnlora')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  Fn LoRA
+                </button>
+                <button
                   className={`sidebar-tab ${activeTab === 'prompt' ? 'active' : ''}`}
                   onClick={() => {
                     setActiveTab('prompt')
@@ -1257,6 +1641,15 @@ function App() {
                   Request
                 </button>
                 <button
+                  className={`sidebar-tab ${activeTab === 'workflow' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('workflow')
+                    setIsSidebarOpen(false)
+                  }}
+                >
+                  Workflow
+                </button>
+                <button
                   className={`sidebar-tab ${activeTab === 'statistics' ? 'active' : ''}`}
                   onClick={() => {
                     setActiveTab('statistics')
@@ -1288,6 +1681,12 @@ function App() {
             LoRA
           </button>
           <button
+            className={`tab ${activeTab === 'fnlora' ? 'active' : ''}`}
+            onClick={() => setActiveTab('fnlora')}
+          >
+            Fn LoRA
+          </button>
+          <button
             className={`tab ${activeTab === 'prompt' ? 'active' : ''}`}
             onClick={() => setActiveTab('prompt')}
           >
@@ -1310,6 +1709,12 @@ function App() {
             onClick={() => setActiveTab('request')}
           >
             Request
+          </button>
+          <button
+            className={`tab ${activeTab === 'workflow' ? 'active' : ''}`}
+            onClick={() => setActiveTab('workflow')}
+          >
+            Workflow
           </button>
           <button
             className={`tab ${activeTab === 'statistics' ? 'active' : ''}`}
@@ -1472,6 +1877,15 @@ function App() {
                   <h2>LoRA Gallery</h2>
                   <p>Browse and download LoRA models</p>
                 </div>
+                <div className="tab-header-actions">
+                  <button
+                    className={`admin-toggle-btn ${adminMode ? 'active' : ''}`}
+                    onClick={handleLoraAdminClick}
+                    title={isLoggedIn ? (adminMode ? 'Exit Admin Mode' : 'Enter Admin Mode') : 'Admin Login'}
+                  >
+                    {adminMode ? '🔓 Admin Mode' : (isLoggedIn ? '🔒 Admin' : '🔐 Login')}
+                  </button>
+                </div>
               </div>
 
               <div className="filter-container">
@@ -1556,11 +1970,26 @@ function App() {
 
               <div className="content-section">
                 <div className="lora-grid">
+                  {/* Add New LoRA Card (Admin Mode Only) */}
+                  {adminMode && (
+                    <div
+                      className="lora-card add-new-card"
+                      onClick={handleCreateLora}
+                    >
+                      <div className="lora-preview add-new-preview">
+                        <span className="add-new-icon">+</span>
+                      </div>
+                      <div className="lora-info">
+                        <h4 className="lora-character">Add New</h4>
+                        <p className="lora-cloth">LoRA</p>
+                      </div>
+                    </div>
+                  )}
                   {filteredLoras.map((lora) => (
                     <div
                       key={lora.id}
-                      className="lora-card"
-                      onClick={() => setSelectedLora(lora)}
+                      className={`lora-card ${adminMode ? 'admin-mode' : ''}`}
+                      onClick={() => adminMode ? handleEditLora(lora) : setSelectedLora(lora)}
                     >
                       <div
                         className="lora-preview"
@@ -1569,6 +1998,82 @@ function App() {
                       <div className="lora-info">
                         <h4 className="lora-character">{lora.character}</h4>
                         <p className="lora-cloth">{lora.cloth || '-'}</p>
+                        {adminMode && <span className="edit-indicator">✎ Edit</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'fnlora' && (
+            <div className="tab-content">
+              <div className="tab-header">
+                <div>
+                  <h2>Functional LoRA</h2>
+                  <p>Browse and download functional LoRA models</p>
+                </div>
+              </div>
+
+              <div className="filter-container">
+                <button
+                  className="filter-toggle-button"
+                  onClick={() => setIsFnLoraFilterExpanded(!isFnLoraFilterExpanded)}
+                >
+                  <span>Filters</span>
+                  <span className={`filter-arrow ${isFnLoraFilterExpanded ? 'expanded' : ''}`}>▼</span>
+                  <span className="filter-count">
+                    {filteredFnLoras.length} / {fnLoras.length}
+                  </span>
+                </button>
+
+                <div className={`filter-content ${isFnLoraFilterExpanded ? 'expanded' : ''}`}>
+                  <div>
+                    <div className="filter-grid">
+                      {/* Type Filter */}
+                      {renderFnLoraFilter(
+                        'Type',
+                        'type',
+                        fnLoraTypeFilter,
+                        setFnLoraTypeFilter,
+                        getFnLoraUniqueValues('type'),
+                        (val) => val === 'all' ? `All (${fnLoras.length})` : val
+                      )}
+
+                      {/* Model Filter */}
+                      {renderFnLoraFilter(
+                        'Model',
+                        'model',
+                        fnLoraModelFilter,
+                        setFnLoraModelFilter,
+                        getFnLoraUniqueValues('model'),
+                        (val) => val === 'all' ? `All (${fnLoras.length})` : val
+                      )}
+                    </div>
+
+                    <div className="filter-info">
+                      Showing {filteredFnLoras.length} of {fnLoras.length} Functional LoRAs
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="content-section">
+                <div className="lora-grid">
+                  {filteredFnLoras.map((fnLora) => (
+                    <div
+                      key={fnLora.id}
+                      className="lora-card"
+                      onClick={() => setSelectedFnLora(fnLora)}
+                    >
+                      <div
+                        className="lora-preview"
+                        style={{ backgroundImage: `url(${fnLora.thumbnail})` }}
+                      ></div>
+                      <div className="lora-info">
+                        <h4 className="lora-character">{fnLora.title}</h4>
+                        <p className="lora-cloth">{fnLora.subTitle || '-'}</p>
                       </div>
                     </div>
                   ))}
@@ -1595,7 +2100,7 @@ function App() {
                 </div>
               </div>
 
-              <div className="filter-info" style={{ padding: '0.5rem 1rem', color: '#9ca3b4', fontSize: '0.85rem' }}>
+              <div className="filter-info" style={{ padding: '0.5rem 1rem', color: themeColors.textSecondary, fontSize: '0.85rem' }}>
                 Showing {sensitivityFilteredCostumes.length} of {costumes.length} costumes
                 {adminMode && ' • Drag categories or items to reorder'}
               </div>
@@ -1749,6 +2254,13 @@ function App() {
                       </div>
                     </div>
                     <div className="stat-card">
+                      <div className="stat-icon">👗</div>
+                      <div className="stat-info">
+                        <div className="stat-value">{statistics.costumes?.total || 0}</div>
+                        <div className="stat-label">Total Costumes</div>
+                      </div>
+                    </div>
+                    <div className="stat-card">
                       <div className="stat-icon">🎨</div>
                       <div className="stat-info">
                         <div className="stat-value">{statistics.loras.total}</div>
@@ -1778,12 +2290,12 @@ function App() {
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 130, 191, 0.2)" />
                           <XAxis
                             dataKey="name"
-                            stroke="#8ba4d0"
-                            tick={{ fill: '#8ba4d0' }}
+                            stroke={themeColors.chartAxis}
+                            tick={{ fill: themeColors.chartAxis }}
                           />
                           <YAxis
-                            stroke="#8ba4d0"
-                            tick={{ fill: '#8ba4d0' }}
+                            stroke={themeColors.chartAxis}
+                            tick={{ fill: themeColors.chartAxis }}
                           />
                           <Tooltip
                             cursor={{ fill: 'rgba(99, 130, 191, 0.08)' }}
@@ -1811,7 +2323,7 @@ function App() {
                               return null
                             }}
                           />
-                          <Bar dataKey="copyCount" fill="#6382bf" radius={[8, 8, 0, 0]} />
+                          <Bar dataKey="copyCount" fill={themeColors.chartBar1} radius={[8, 8, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -1831,22 +2343,22 @@ function App() {
                               labelLine={false}
                               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                               outerRadius={60}
-                              fill="#8884d8"
+                              fill={themeColors.chartPie1}
                               dataKey="value"
                             >
                               {Object.keys(statistics.prompts.byCharacter).map((_, index) => (
-                                <Cell key={`cell-${index}`} fill={['#6382bf', '#8ba4d0', '#4a5f8f', '#5a7bb3', '#3d4f73'][index % 5]} />
+                                <Cell key={`cell-${index}`} fill={[themeColors.chartPie1, themeColors.chartPie2, themeColors.chartPie3, themeColors.chartPie4, themeColors.chartPie5][index % 5]} />
                               ))}
                             </Pie>
                             <Tooltip
                               contentStyle={{
-                                backgroundColor: 'rgba(35, 40, 55, 0.98)',
-                                border: '1px solid rgba(99, 130, 191, 0.3)',
+                                backgroundColor: themeColors.tooltipBg,
+                                border: `1px solid ${themeColors.tooltipBorder}`,
                                 borderRadius: '8px',
-                                color: '#e4e6eb'
+                                color: themeColors.textPrimary
                               }}
                               itemStyle={{
-                                color: '#e4e6eb'
+                                color: themeColors.textPrimary
                               }}
                             />
                           </PieChart>
@@ -1867,21 +2379,21 @@ function App() {
                               labelLine={false}
                               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                               outerRadius={60}
-                              fill="#8884d8"
+                              fill={themeColors.chartPie1}
                               dataKey="value"
                             >
-                              <Cell fill="#6382bf" />
-                              <Cell fill="#e07a5f" />
+                              <Cell fill={themeColors.chartBar1} />
+                              <Cell fill={themeColors.chartCostume} />
                             </Pie>
                             <Tooltip
                               contentStyle={{
-                                backgroundColor: 'rgba(35, 40, 55, 0.98)',
-                                border: '1px solid rgba(99, 130, 191, 0.3)',
+                                backgroundColor: themeColors.tooltipBg,
+                                border: `1px solid ${themeColors.tooltipBorder}`,
                                 borderRadius: '8px',
-                                color: '#e4e6eb'
+                                color: themeColors.textPrimary
                               }}
                               itemStyle={{
-                                color: '#e4e6eb'
+                                color: themeColors.textPrimary
                               }}
                             />
                           </PieChart>
@@ -1899,30 +2411,159 @@ function App() {
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 130, 191, 0.2)" />
                           <XAxis
                             dataKey="name"
-                            stroke="#8ba4d0"
-                            tick={{ fill: '#8ba4d0' }}
+                            stroke={themeColors.chartAxis}
+                            tick={{ fill: themeColors.chartAxis }}
                             angle={-45}
                             textAnchor="end"
                             height={100}
                           />
                           <YAxis
-                            stroke="#8ba4d0"
-                            tick={{ fill: '#8ba4d0' }}
+                            stroke={themeColors.chartAxis}
+                            tick={{ fill: themeColors.chartAxis }}
                           />
                           <Tooltip
                             cursor={{ fill: 'rgba(99, 130, 191, 0.08)' }}
                             contentStyle={{
-                              backgroundColor: 'rgba(35, 40, 55, 0.98)',
-                              border: '1px solid rgba(99, 130, 191, 0.3)',
+                              backgroundColor: themeColors.tooltipBg,
+                              border: `1px solid ${themeColors.tooltipBorder}`,
                               borderRadius: '8px',
-                              color: '#e4e6eb'
+                              color: themeColors.textPrimary
                             }}
                           />
-                          <Bar dataKey="count" fill="#8ba4d0" radius={[8, 8, 0, 0]} />
+                          <Bar dataKey="count" fill={themeColors.chartBar2} radius={[8, 8, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
+
+                  {/* Costume Statistics */}
+                  {statistics.costumes && statistics.costumes.total > 0 && (
+                    <div className="chart-section">
+                      <h3>Costume Statistics</h3>
+
+                      <div className="chart-container">
+                        <h4>Top 10 Most Copied Costumes</h4>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <BarChart
+                            data={statistics.costumes.topCopied}
+                            barCategoryGap="20%"
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 130, 191, 0.2)" />
+                            <XAxis
+                              dataKey="name"
+                              stroke={themeColors.chartAxis}
+                              tick={{ fill: themeColors.chartAxis }}
+                            />
+                            <YAxis
+                              stroke={themeColors.chartAxis}
+                              tick={{ fill: themeColors.chartAxis }}
+                            />
+                            <Tooltip
+                              cursor={{ fill: 'rgba(99, 130, 191, 0.08)' }}
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  const data = payload[0].payload
+                                  return (
+                                    <div className="custom-chart-tooltip">
+                                      {data.thumbnail && (
+                                        <img
+                                          src={data.thumbnail}
+                                          alt={data.name}
+                                          className="tooltip-preview"
+                                        />
+                                      )}
+                                      <div className="tooltip-info">
+                                        <p className="tooltip-label">{data.name}</p>
+                                        <p className="tooltip-value">Copies: {data.copyCount}</p>
+                                        <p className="tooltip-meta">Type: {data.type}</p>
+                                        <p className="tooltip-meta">View: {data.view}</p>
+                                      </div>
+                                    </div>
+                                  )
+                                }
+                                return null
+                              }}
+                            />
+                            <Bar dataKey="copyCount" fill={themeColors.chartCostume} radius={[8, 8, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="chart-row">
+                        <div className="chart-container half-width">
+                          <h4>Costumes by Type</h4>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <PieChart>
+                              <Pie
+                                data={Object.entries(statistics.costumes.byType).map(([key, value]) => ({
+                                  name: key,
+                                  value: value
+                                }))}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                outerRadius={60}
+                                fill={themeColors.chartPie1}
+                                dataKey="value"
+                              >
+                                {Object.keys(statistics.costumes.byType).map((_, index) => (
+                                  <Cell key={`cell-${index}`} fill={[themeColors.chartCostume, themeColors.chartPie2, themeColors.chartPie3, themeColors.chartPie4, themeColors.chartPie5][index % 5]} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: themeColors.tooltipBg,
+                                  border: `1px solid ${themeColors.tooltipBorder}`,
+                                  borderRadius: '8px',
+                                  color: themeColors.textPrimary
+                                }}
+                                itemStyle={{
+                                  color: themeColors.textPrimary
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+
+                        <div className="chart-container half-width">
+                          <h4>Costumes by View</h4>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <PieChart>
+                              <Pie
+                                data={Object.entries(statistics.costumes.byView).map(([key, value]) => ({
+                                  name: key,
+                                  value: value
+                                }))}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                outerRadius={60}
+                                fill={themeColors.chartPie1}
+                                dataKey="value"
+                              >
+                                {Object.keys(statistics.costumes.byView).map((_, index) => (
+                                  <Cell key={`cell-${index}`} fill={[themeColors.chartCostume, themeColors.chartPie2, themeColors.chartPie3, themeColors.chartPie4, themeColors.chartPie5][index % 5]} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: themeColors.tooltipBg,
+                                  border: `1px solid ${themeColors.tooltipBorder}`,
+                                  borderRadius: '8px',
+                                  color: themeColors.textPrimary
+                                }}
+                                itemStyle={{
+                                  color: themeColors.textPrimary
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* LoRA Statistics */}
                   <div className="chart-section">
@@ -1935,7 +2576,7 @@ function App() {
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(99, 130, 191, 0.2)" />
                           <XAxis
                             dataKey="name"
-                            stroke="#8ba4d0"
+                            stroke={themeColors.chartAxis}
                             tick={(props) => {
                               const { x, y, payload } = props
                               if (!payload || !payload.value) return null
@@ -1958,8 +2599,8 @@ function App() {
                                     textAnchor="middle"
                                     fontSize={12}
                                   >
-                                    <tspan x={0} dy={16} fill="#8ba4d0">{line1}</tspan>
-                                    {line2 && <tspan x={0} dy={14} fill="#6b7a99">{line2}</tspan>}
+                                    <tspan x={0} dy={16} fill={themeColors.chartBar2}>{line1}</tspan>
+                                    {line2 && <tspan x={0} dy={14} fill={themeColors.textMuted}>{line2}</tspan>}
                                   </text>
                                 </g>
                               )
@@ -1967,8 +2608,8 @@ function App() {
                             height={100}
                           />
                           <YAxis
-                            stroke="#8ba4d0"
-                            tick={{ fill: '#8ba4d0' }}
+                            stroke={themeColors.chartAxis}
+                            tick={{ fill: themeColors.chartAxis }}
                           />
                           <Tooltip
                             cursor={{ fill: 'rgba(99, 130, 191, 0.08)' }}
@@ -2006,7 +2647,7 @@ function App() {
                               return null
                             }}
                           />
-                          <Bar dataKey="downloadCount" fill="#6382bf" radius={[8, 8, 0, 0]} />
+                          <Bar dataKey="downloadCount" fill={themeColors.chartBar1} radius={[8, 8, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -2026,22 +2667,22 @@ function App() {
                               labelLine={false}
                               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                               outerRadius={60}
-                              fill="#8884d8"
+                              fill={themeColors.chartPie1}
                               dataKey="value"
                             >
                               {Object.keys(statistics.loras.byGender).map((_, index) => (
-                                <Cell key={`cell-${index}`} fill={['#6382bf', '#e07a5f', '#8ba4d0'][index % 3]} />
+                                <Cell key={`cell-${index}`} fill={[themeColors.chartPie1, themeColors.chartCostume, themeColors.chartPie2][index % 3]} />
                               ))}
                             </Pie>
                             <Tooltip
                               contentStyle={{
-                                backgroundColor: 'rgba(35, 40, 55, 0.98)',
-                                border: '1px solid rgba(99, 130, 191, 0.3)',
+                                backgroundColor: themeColors.tooltipBg,
+                                border: `1px solid ${themeColors.tooltipBorder}`,
                                 borderRadius: '8px',
-                                color: '#e4e6eb'
+                                color: themeColors.textPrimary
                               }}
                               itemStyle={{
-                                color: '#e4e6eb'
+                                color: themeColors.textPrimary
                               }}
                             />
                           </PieChart>
@@ -2062,22 +2703,22 @@ function App() {
                               labelLine={false}
                               label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                               outerRadius={60}
-                              fill="#8884d8"
+                              fill={themeColors.chartPie1}
                               dataKey="value"
                             >
                               {Object.keys(statistics.loras.byModel).map((_, index) => (
-                                <Cell key={`cell-${index}`} fill={['#6382bf', '#8ba4d0', '#4a5f8f', '#5a7bb3', '#3d4f73'][index % 5]} />
+                                <Cell key={`cell-${index}`} fill={[themeColors.chartPie1, themeColors.chartPie2, themeColors.chartPie3, themeColors.chartPie4, themeColors.chartPie5][index % 5]} />
                               ))}
                             </Pie>
                             <Tooltip
                               contentStyle={{
-                                backgroundColor: 'rgba(35, 40, 55, 0.98)',
-                                border: '1px solid rgba(99, 130, 191, 0.3)',
+                                backgroundColor: themeColors.tooltipBg,
+                                border: `1px solid ${themeColors.tooltipBorder}`,
                                 borderRadius: '8px',
-                                color: '#e4e6eb'
+                                color: themeColors.textPrimary
                               }}
                               itemStyle={{
-                                color: '#e4e6eb'
+                                color: themeColors.textPrimary
                               }}
                             />
                           </PieChart>
@@ -2094,6 +2735,18 @@ function App() {
           {activeTab === 'changelog' && (
             <div className="tab-content">
               <Changelog />
+            </div>
+          )}
+
+          {activeTab === 'workflow' && (
+            <div className="tab-content">
+              <Workflow
+                isLoggedIn={isLoggedIn}
+                adminMode={adminMode}
+                onAdminLoginSuccess={handleAdminLoginSuccess}
+                onAdminLogout={handleAdminLogout}
+                onAdminModeToggle={handleAdminModeToggle}
+              />
             </div>
           )}
         </div>
@@ -2214,16 +2867,32 @@ function App() {
               )}
             </div>
 
-            <button
-              className="copy-button"
-              onClick={() => handleCopyPrompt(selectedCostume.prompt, selectedCostume.id, 'costume')}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              Copy Prompt
-            </button>
+            <div className="copy-buttons-group">
+              <button
+                className="copy-button costume-copy"
+                onClick={() => handleCopyPrompt(selectedCostume.costumePrompt, selectedCostume.id, 'costume')}
+                disabled={!selectedCostume.costumePrompt}
+                title={selectedCostume.costumePrompt ? 'Copy costume-only prompt' : 'Costume prompt not available'}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Costume
+              </button>
+              <button
+                className="copy-button scene-copy"
+                onClick={() => handleCopyPrompt(selectedCostume.prompt, selectedCostume.id, 'costume')}
+                disabled={!selectedCostume.prompt}
+                title={selectedCostume.prompt ? 'Copy costume + scene prompt' : 'Scene prompt not available'}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Scene
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2655,14 +3324,25 @@ function App() {
                 </div>
               </div>
 
-              {/* Editable Prompt Text */}
+              {/* Editable Costume Prompt (Pure clothing) */}
               <div className="edit-field full-width">
-                <label>Prompt:</label>
+                <label>👗 Costume Prompt (clothing only):</label>
+                <textarea
+                  value={editCostumeData.editedCostumePrompt}
+                  onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedCostumePrompt: e.target.value }))}
+                  rows={4}
+                  placeholder="Enter pure costume/clothing description..."
+                />
+              </div>
+
+              {/* Editable Scene Prompt (Costume + Scene) */}
+              <div className="edit-field full-width">
+                <label>🎬 Scene Prompt (costume + scene):</label>
                 <textarea
                   value={editCostumeData.editedPrompt}
                   onChange={(e) => setEditCostumeData(prev => ({ ...prev, editedPrompt: e.target.value }))}
                   rows={6}
-                  placeholder="Enter prompt text..."
+                  placeholder="Enter full scene prompt with costume..."
                 />
               </div>
             </div>
@@ -2674,6 +3354,272 @@ function App() {
               </button>
               <button className="update-button" onClick={handleUpdateCostume}>
                 {isCreatingCostume ? 'Create Costume' : 'Update Costume'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LoRA Edit Modal */}
+      {isEditingLora && editLoraData && (
+        <div className="popup-overlay" onClick={handleCloseEditLora}>
+          <div className="popup-content edit-mode lora-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={handleCloseEditLora}>×</button>
+
+            <h3 className="edit-modal-title">
+              {isCreatingLora ? '✨ Create New LoRA' : `✏️ Edit: ${editLoraData.character || 'LoRA'}`}
+            </h3>
+
+            {/* Thumbnail Upload (Shared) */}
+            <div className="edit-images">
+              <label style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', display: 'block' }}>
+                📷 Thumbnail (shared across all versions):
+              </label>
+              <div
+                className={`edit-image-placeholder ${pendingLoraThumbnail || (!isCreatingLora && editLoraData.thumbnail) ? 'has-image' : ''}`}
+                onClick={() => {
+                  setUploadingLoraImageIndex(0)
+                  loraImageInputRef.current?.click()
+                }}
+                style={{ aspectRatio: '1', width: '120px', height: '120px' }}
+              >
+                {pendingLoraThumbnail ? (
+                  <>
+                    <img src={URL.createObjectURL(pendingLoraThumbnail)} alt="Thumbnail preview" />
+                    <div className="edit-image-overlay"><span>Change</span></div>
+                  </>
+                ) : !isCreatingLora && editLoraData.thumbnail ? (
+                  <>
+                    <img src={editLoraData.thumbnail} alt="Thumbnail" />
+                    <div className="edit-image-overlay"><span>Change</span></div>
+                  </>
+                ) : (
+                  <span>📷 Square</span>
+                )}
+              </div>
+            </div>
+
+            {/* Model JSON Editor */}
+            <div className="edit-field full-width" style={{ marginTop: '1rem' }}>
+              <label>Model Versions (JSON):</label>
+              <textarea
+                value={editLoraData.editedModelJson || '[]'}
+                onChange={(e) => {
+                  setEditLoraData(prev => ({ ...prev, editedModelJson: e.target.value }))
+                  // Try to parse and update editedModel
+                  try {
+                    const parsed = JSON.parse(e.target.value)
+                    if (Array.isArray(parsed)) {
+                      setEditLoraData(prev => ({ ...prev, editedModel: parsed }))
+                    }
+                  } catch (err) {
+                    // Invalid JSON, ignore
+                  }
+                }}
+                rows={3}
+                placeholder='[{"name": "Illustrious", "version": "v2.0"}]'
+                style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+              />
+            </div>
+
+            {/* Version Tabs for Images */}
+            {editLoraData.editedModel && editLoraData.editedModel.length > 0 && (
+              <div className="lora-version-image-section">
+                <label style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', display: 'block' }}>
+                  🖼️ Version Images (click tab to switch):
+                </label>
+                
+                {/* Version Tabs */}
+                <div className="lora-edit-version-tabs">
+                  {editLoraData.editedModel.map((model, idx) => (
+                    <button
+                      key={idx}
+                      className={`lora-edit-version-tab ${editLoraSelectedVersion === idx ? 'active' : ''}`}
+                      onClick={() => setEditLoraSelectedVersion(idx)}
+                    >
+                      {model.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Images for Selected Version */}
+                {(() => {
+                  const currentModel = editLoraData.editedModel[editLoraSelectedVersion]
+                  if (!currentModel) return null
+                  const versionName = currentModel.name.toLowerCase()
+                  const versionImages = pendingLoraVersionImages[versionName] || [null, null]
+                  // Find existing images from versions
+                  const existingVersion = editLoraData.versions?.find(v => v.name.toLowerCase() === versionName)
+                  const existingImages = existingVersion?.images || []
+
+                  return (
+                    <div className="edit-image-placeholder-container" style={{ marginTop: '0.5rem' }}>
+                      {/* Image 1 */}
+                      <div
+                        className={`edit-image-placeholder ${versionImages[0] || existingImages[0] ? 'has-image' : ''}`}
+                        onClick={() => {
+                          setUploadingLoraImageIndex(1)
+                          loraImageInputRef.current?.click()
+                        }}
+                      >
+                        {versionImages[0] ? (
+                          <>
+                            <img src={URL.createObjectURL(versionImages[0])} alt="Preview 1" />
+                            <div className="edit-image-overlay"><span>Change</span></div>
+                          </>
+                        ) : existingImages[0] ? (
+                          <>
+                            <img src={existingImages[0]} alt="Preview 1" />
+                            <div className="edit-image-overlay"><span>Change</span></div>
+                          </>
+                        ) : (
+                          <span>🖼️ Image 1<br/>({currentModel.name})</span>
+                        )}
+                      </div>
+
+                      {/* Image 2 */}
+                      <div
+                        className={`edit-image-placeholder ${versionImages[1] || existingImages[1] ? 'has-image' : ''}`}
+                        onClick={() => {
+                          setUploadingLoraImageIndex(2)
+                          loraImageInputRef.current?.click()
+                        }}
+                      >
+                        {versionImages[1] ? (
+                          <>
+                            <img src={URL.createObjectURL(versionImages[1])} alt="Preview 2" />
+                            <div className="edit-image-overlay"><span>Change</span></div>
+                          </>
+                        ) : existingImages[1] ? (
+                          <>
+                            <img src={existingImages[1]} alt="Preview 2" />
+                            <div className="edit-image-overlay"><span>Change</span></div>
+                          </>
+                        ) : (
+                          <span>🖼️ Image 2<br/>({currentModel.name})</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+
+            <input
+              ref={loraImageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                if (e.target.files[0] && uploadingLoraImageIndex !== null) {
+                  handleLoraImageSelect(uploadingLoraImageIndex, e.target.files[0])
+                }
+                e.target.value = ''
+              }}
+            />
+
+            {/* Form Fields */}
+            <div className="edit-field-grid" style={{ marginTop: '1rem' }}>
+              <div className="edit-field">
+                <label>Character: <span className="required">*</span></label>
+                <input
+                  type="text"
+                  value={editLoraData.editedCharacter}
+                  onChange={(e) => setEditLoraData(prev => ({ ...prev, editedCharacter: e.target.value }))}
+                  placeholder="Character name"
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Cloth/Version:</label>
+                <input
+                  type="text"
+                  value={editLoraData.editedCloth}
+                  onChange={(e) => setEditLoraData(prev => ({ ...prev, editedCloth: e.target.value }))}
+                  placeholder="e.g., 1.0, 2.0, Swimsuit"
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Gender:</label>
+                <select
+                  value={editLoraData.editedGender}
+                  onChange={(e) => setEditLoraData(prev => ({ ...prev, editedGender: e.target.value }))}
+                >
+                  <option value="Girl">Girl</option>
+                  <option value="Boy">Boy</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="edit-field">
+                <label>Company:</label>
+                <input
+                  type="text"
+                  list="lora-company-options"
+                  value={editLoraData.editedCompany}
+                  onChange={(e) => setEditLoraData(prev => ({ ...prev, editedCompany: e.target.value }))}
+                  placeholder=""
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Group:</label>
+                <input
+                  type="text"
+                  list="lora-group-options"
+                  value={editLoraData.editedGroup}
+                  onChange={(e) => setEditLoraData(prev => ({ ...prev, editedGroup: e.target.value }))}
+                  placeholder=""
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Link:</label>
+                <input
+                  type="text"
+                  value={editLoraData.editedLink}
+                  onChange={(e) => setEditLoraData(prev => ({ ...prev, editedLink: e.target.value }))}
+                  placeholder=""
+                />
+              </div>
+            </div>
+
+            {/* Prompt */}
+            <div className="edit-field full-width">
+              <label>Prompt:</label>
+              <textarea
+                value={editLoraData.editedPrompt}
+                onChange={(e) => setEditLoraData(prev => ({ ...prev, editedPrompt: e.target.value }))}
+                rows={4}
+                placeholder="LoRA trigger prompt..."
+              />
+            </div>
+
+            {/* Datalists for autocomplete */}
+            <datalist id="lora-company-options">
+              {getLoraUniqueValues('company').map(val => (
+                <option key={val} value={val} />
+              ))}
+            </datalist>
+            <datalist id="lora-group-options">
+              {getLoraUniqueValues('group').map(val => (
+                <option key={val} value={val} />
+              ))}
+            </datalist>
+
+            {/* Actions */}
+            <div className="edit-actions">
+              {!isCreatingLora && (
+                <button className="cancel-button" onClick={handleDeleteLora} style={{ background: 'rgba(239, 68, 68, 0.2)', borderColor: 'rgba(239, 68, 68, 0.5)', color: '#f87171' }}>
+                  🗑️ Delete
+                </button>
+              )}
+              <button className="cancel-button" onClick={handleCloseEditLora}>
+                Cancel
+              </button>
+              <button className="update-button" onClick={handleUpdateLora}>
+                {isCreatingLora ? 'Create LoRA' : 'Update LoRA'}
               </button>
             </div>
           </div>
@@ -2820,6 +3766,117 @@ function App() {
                 <button
                   className="lora-action-button"
                   onClick={() => handleCopyPrompt(selectedLora.prompt, selectedLora.id, 'lora')}
+                  title="Copy prompt"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fn LoRA Detail Modal */}
+      {selectedFnLora && (
+        <div className="popup-overlay" onClick={() => setSelectedFnLora(null)}>
+          <div className="popup-content" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={() => setSelectedFnLora(null)}>×</button>
+
+            {selectedFnLora.versions && selectedFnLora.versions.length > 0 && (
+              <div className="lora-version-header">
+                <div className="lora-version-left">
+                  <span className="lora-version-label">Version:</span>
+                  <span className="lora-version-text">
+                    {selectedFnLora.versions[selectedFnLoraVersion]?.displayName || selectedFnLora.versions[0]?.displayName}
+                  </span>
+                </div>
+                <div className="lora-company-group-container">
+                  {selectedFnLora.type && (
+                    <div className="lora-company-line">
+                      <span className="company-from-label">Type:</span>
+                      <span className="lora-company-name">{selectedFnLora.type}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className={`popup-images ${
+              selectedFnLora.versions && selectedFnLora.versions[selectedFnLoraVersion]?.images?.length > 1
+                ? 'portrait'
+                : 'landscape'
+            }`}>
+              {selectedFnLora.versions && selectedFnLora.versions[selectedFnLoraVersion]?.images?.length > 0 ? (
+                selectedFnLora.versions[selectedFnLoraVersion].images.map((image, index) => (
+                  <img key={index} src={image} alt={`${selectedFnLora.name} ${index + 1}`} />
+                ))
+              ) : (
+                <img src={selectedFnLora.thumbnail} alt={selectedFnLora.name} />
+              )}
+            </div>
+
+            <div className="lora-meta-info">
+              {selectedFnLora.title && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Title:</span>
+                  <span className="lora-meta-value">{selectedFnLora.title}</span>
+                </div>
+              )}
+              {selectedFnLora.subTitle && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Sub-Title:</span>
+                  <span className="lora-meta-value">{selectedFnLora.subTitle}</span>
+                </div>
+              )}
+              {selectedFnLora.type && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Type:</span>
+                  <span className="lora-meta-value">{selectedFnLora.type}</span>
+                </div>
+              )}
+              {selectedFnLora.model && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Model:</span>
+                  <span className="lora-meta-value">{selectedFnLora.model}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="lora-actions">
+              {selectedFnLora.versions && selectedFnLora.versions[selectedFnLoraVersion]?.filePath && (
+                <button
+                  className="lora-action-button"
+                  onClick={async () => {
+                    const version = selectedFnLora.versions[selectedFnLoraVersion]
+                    const link = document.createElement('a')
+                    link.href = version.filePath
+                    link.download = version.fileName
+                    document.body.appendChild(link)
+                    link.click()
+                    document.body.removeChild(link)
+                    // Update download count
+                    await fetch(`/api/fn-loras/${selectedFnLora.id}/download`, { method: 'POST' })
+                  }}
+                  title="Download"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                </button>
+              )}
+              {selectedFnLora.prompt && (
+                <button
+                  className="lora-action-button"
+                  onClick={async () => {
+                    navigator.clipboard.writeText(selectedFnLora.prompt)
+                    // Update copy count
+                    await fetch(`/api/fn-loras/${selectedFnLora.id}/copy`, { method: 'POST' })
+                  }}
                   title="Copy prompt"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
