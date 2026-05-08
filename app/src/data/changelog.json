@@ -69,6 +69,12 @@
         "type": "build",
         "message": "Added ESLint configuration so contributors can lint locally",
         "hidden": true
+      },
+      {
+        "hash": "7e0a5ce",
+        "type": "docs",
+        "message": "Added contributor guide documenting commit and security conventions",
+        "hidden": true
       }
     ]
   },
