@@ -27,6 +27,11 @@
         "hash": "511f831",
         "type": "security",
         "message": "Hardened admin authentication — server now refuses to start with missing or malformed credentials"
+      },
+      {
+        "hash": "7a8eaac",
+        "type": "security",
+        "message": "Hardened upload/download endpoints against path-traversal attempts"
       }
     ]
   },

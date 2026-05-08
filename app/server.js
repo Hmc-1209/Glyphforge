@@ -108,6 +108,65 @@ app.use((req, res, next) => {
   next()
 })
 
+// ============================================
+// SAFE-PATH / VALIDATION HELPERS
+// ============================================
+
+// A "slug" is a filesystem-safe id segment derived from user input.
+// Allowed: letters, digits, dot, dash, underscore. Length 1..200.
+// Rejects:  empty, ".", "..", anything containing / \ NUL or control chars.
+const SLUG_RE = /^[A-Za-z0-9._-]{1,200}$/
+function isSafeSlug(s) {
+  if (typeof s !== 'string' || !s.length) return false
+  if (s === '.' || s === '..') return false
+  return SLUG_RE.test(s)
+}
+function requireSlug(name, value, res) {
+  if (!isSafeSlug(value)) {
+    res.status(400).json({ error: `Invalid ${name}` })
+    return false
+  }
+  return true
+}
+
+// Resolve `child` under `base` and ensure the resolved path actually stays
+// inside `base`. Defends against ../, absolute overrides, symlinks, mixed
+// separators, and unicode path tricks. Returns null if the path escapes.
+function safeResolveUnder(base, ...segments) {
+  const resolved = path.resolve(base, ...segments)
+  const baseResolved = path.resolve(base)
+  if (resolved !== baseResolved && !resolved.startsWith(baseResolved + path.sep)) {
+    return null
+  }
+  return resolved
+}
+
+// Whitelist of gallery types (used in /api/gallery/admin/:type/...).
+const GALLERY_TYPES = new Set(['static', 'video', 'story'])
+function requireGalleryType(value, res) {
+  if (!GALLERY_TYPES.has(value)) {
+    res.status(400).json({ error: 'Invalid gallery type' })
+    return false
+  }
+  return true
+}
+
+// Express middleware factory: validate `:type` against GALLERY_TYPES and any
+// listed `:slug` params with isSafeSlug. Use as:
+//   app.put('/api/gallery/admin/:type/:id', validatePathParams(['id']), authMiddleware, ...)
+function validatePathParams(slugParams = [], { requireType = true } = {}) {
+  return (req, res, next) => {
+    if (requireType && 'type' in req.params && !requireGalleryType(req.params.type, res)) return
+    for (const p of slugParams) {
+      const v = req.params[p]
+      if (v != null && !isSafeSlug(v)) {
+        return res.status(400).json({ error: `Invalid ${p}` })
+      }
+    }
+    next()
+  }
+}
+
 // Webhook configuration
 const WEBHOOK_ENABLED = process.env.WEBHOOK_ENABLED === 'true'
 const WEBHOOK_URL = process.env.WEBHOOK_URL
@@ -1137,7 +1196,9 @@ app.post('/api/fn-loras/:id/download', (req, res) => {
 // Multer storage for Fn LoRA images
 const fnLoraImageStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', req.params.id)
+    if (!isSafeSlug(req.params.id)) return cb(new Error('Invalid id'))
+    const fnLoraPath = safeResolveUnder(LORA_FOLDER_PATH, 'functional', req.params.id)
+    if (!fnLoraPath) return cb(new Error('Invalid path'))
     if (!fs.existsSync(fnLoraPath)) {
       fs.mkdirSync(fnLoraPath, { recursive: true })
     }
@@ -1145,7 +1206,9 @@ const fnLoraImageStorage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const imageIndex = req.params.imageIndex || '0'
+    if (!/^\d{1,3}$/.test(String(imageIndex))) return cb(new Error('Invalid imageIndex'))
     const version = req.query.version || req.body.version || ''
+    if (version && !isSafeSlug(version)) return cb(new Error('Invalid version'))
     if (imageIndex === '0') {
       cb(null, '0.png')
     } else if (version) {
@@ -1171,15 +1234,21 @@ const fnLoraImageUpload = multer({
 // Multer storage for Fn LoRA safetensors files
 const fnLoraSafetensorsStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', req.params.id)
+    if (!isSafeSlug(req.params.id)) return cb(new Error('Invalid id'))
+    const fnLoraPath = safeResolveUnder(LORA_FOLDER_PATH, 'functional', req.params.id)
+    if (!fnLoraPath) return cb(new Error('Invalid path'))
     if (!fs.existsSync(fnLoraPath)) {
       fs.mkdirSync(fnLoraPath, { recursive: true })
     }
     cb(null, fnLoraPath)
   },
   filename: (req, file, cb) => {
-    // Keep original filename
-    cb(null, file.originalname)
+    // Sanitize: take basename only, strip any path separators or NULs.
+    const safe = path.basename(file.originalname || '').replace(/[\x00-\x1f]/g, '')
+    if (!safe || safe === '.' || safe === '..' || !safe.endsWith('.safetensors')) {
+      return cb(new Error('Invalid filename'))
+    }
+    cb(null, safe)
   }
 })
 
@@ -1385,9 +1454,15 @@ app.post('/api/fn-loras/:id/safetensors', authMiddleware, fnLoraSafetensorsUploa
 app.delete('/api/fn-loras/:id/safetensors/:version', authMiddleware, (req, res) => {
   try {
     const { id, version } = req.params
-    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', id)
+    if (!requireSlug('id', id, res)) return
+    if (!requireSlug('version', version, res)) return
+
+    const fnLoraPath = safeResolveUnder(LORA_FOLDER_PATH, 'functional', id)
+    if (!fnLoraPath) return res.status(400).json({ error: 'Invalid path' })
+
     const filename = `${id}(${version}).safetensors`
-    const filePath = path.join(fnLoraPath, filename)
+    const filePath = safeResolveUnder(fnLoraPath, filename)
+    if (!filePath) return res.status(400).json({ error: 'Invalid path' })
 
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath)
@@ -1415,7 +1490,9 @@ app.delete('/api/fn-loras/:id/safetensors/:version', authMiddleware, (req, res) 
 // Multer storage for LoRA images
 const loraImageStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const loraPath = path.join(LORA_FOLDER_PATH, 'character', req.params.id)
+    if (!isSafeSlug(req.params.id)) return cb(new Error('Invalid id'))
+    const loraPath = safeResolveUnder(LORA_FOLDER_PATH, 'character', req.params.id)
+    if (!loraPath) return cb(new Error('Invalid path'))
     if (!fs.existsSync(loraPath)) {
       fs.mkdirSync(loraPath, { recursive: true })
     }
@@ -1423,9 +1500,11 @@ const loraImageStorage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const imageIndex = req.params.imageIndex || '0'
+    if (!/^\d{1,3}$/.test(String(imageIndex))) return cb(new Error('Invalid imageIndex'))
     // For images 1 and 2, include version suffix if provided
     // Support both query param and body (query takes precedence, body requires correct FormData order)
     const version = req.query.version || req.body.version || ''
+    if (version && !isSafeSlug(version)) return cb(new Error('Invalid version'))
     if (imageIndex === '0') {
       cb(null, '0.png')
     } else if (version) {
@@ -1451,15 +1530,20 @@ const loraImageUpload = multer({
 // Multer storage for Character LoRA safetensors files
 const loraSafetensorsStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const loraPath = path.join(LORA_FOLDER_PATH, 'character', req.params.id)
+    if (!isSafeSlug(req.params.id)) return cb(new Error('Invalid id'))
+    const loraPath = safeResolveUnder(LORA_FOLDER_PATH, 'character', req.params.id)
+    if (!loraPath) return cb(new Error('Invalid path'))
     if (!fs.existsSync(loraPath)) {
       fs.mkdirSync(loraPath, { recursive: true })
     }
     cb(null, loraPath)
   },
   filename: (req, file, cb) => {
-    // Keep original filename
-    cb(null, file.originalname)
+    const safe = path.basename(file.originalname || '').replace(/[\x00-\x1f]/g, '')
+    if (!safe || safe === '.' || safe === '..' || !safe.endsWith('.safetensors')) {
+      return cb(new Error('Invalid filename'))
+    }
+    cb(null, safe)
   }
 })
 
@@ -1674,7 +1758,11 @@ app.post('/api/loras/:id/safetensors', authMiddleware, loraSafetensorsUpload.sin
 app.delete('/api/loras/:id/safetensors/:filename', authMiddleware, (req, res) => {
   try {
     const { id, filename } = req.params
-    const filePath = path.join(LORA_FOLDER_PATH, 'character', id, filename)
+    if (!requireSlug('id', id, res)) return
+    if (!requireSlug('filename', filename, res)) return
+
+    const filePath = safeResolveUnder(LORA_FOLDER_PATH, 'character', id, filename)
+    if (!filePath) return res.status(400).json({ error: 'Invalid path' })
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'File not found' })
@@ -2190,7 +2278,10 @@ app.post('/api/prompts/:id/image/:imageIndex', authMiddleware, promptUpload.sing
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const { type, albumId } = req.params
-    const uploadPath = path.join(GALLERY_FOLDER_PATH, type, albumId)
+    if (!GALLERY_TYPES.has(type)) return cb(new Error('Invalid gallery type'))
+    if (!isSafeSlug(albumId)) return cb(new Error('Invalid albumId'))
+    const uploadPath = safeResolveUnder(GALLERY_FOLDER_PATH, type, albumId)
+    if (!uploadPath) return cb(new Error('Invalid path'))
 
     // Create directory if it doesn't exist
     if (!fs.existsSync(uploadPath)) {
@@ -2507,6 +2598,7 @@ app.post('/api/gallery/:type/:id/view', async (req, res) => {
 
 // Admin API - Upload files (simplified - no conversion)
 app.post('/api/gallery/admin/:type/:albumId/upload',
+  validatePathParams(['albumId']),
   authMiddleware,
   upload.array('images', 50),
   async (req, res) => {
@@ -2528,7 +2620,7 @@ app.post('/api/gallery/admin/:type/:albumId/upload',
 )
 
 // Admin API - Create album
-app.post('/api/gallery/admin/:type/create', authMiddleware, async (req, res) => {
+app.post('/api/gallery/admin/:type/create', validatePathParams(), authMiddleware, async (req, res) => {
   try {
     const { type } = req.params
     const { id, meta } = req.body
@@ -2558,7 +2650,7 @@ app.post('/api/gallery/admin/:type/create', authMiddleware, async (req, res) => 
 })
 
 // Admin API - Update album order (MUST come before /:type/:id to avoid route conflict)
-app.put('/api/gallery/admin/:type/reorder-albums', authMiddleware, async (req, res) => {
+app.put('/api/gallery/admin/:type/reorder-albums', validatePathParams(), authMiddleware, async (req, res) => {
   try {
     const { type } = req.params
     const { albums } = req.body
@@ -2618,7 +2710,7 @@ app.put('/api/gallery/admin/:type/reorder-albums', authMiddleware, async (req, r
 })
 
 // Admin API - Update album metadata
-app.put('/api/gallery/admin/:type/:id', authMiddleware, async (req, res) => {
+app.put('/api/gallery/admin/:type/:id', validatePathParams(['id']), authMiddleware, async (req, res) => {
   try {
     const { type, id } = req.params
     const { meta } = req.body
@@ -2640,7 +2732,7 @@ app.put('/api/gallery/admin/:type/:id', authMiddleware, async (req, res) => {
 })
 
 // Admin API - Delete album
-app.delete('/api/gallery/admin/:type/:id', authMiddleware, async (req, res) => {
+app.delete('/api/gallery/admin/:type/:id', validatePathParams(['id']), authMiddleware, async (req, res) => {
   try {
     const { type, id } = req.params
     const albumPath = path.join(GALLERY_FOLDER_PATH, type, id)
@@ -2661,7 +2753,7 @@ app.delete('/api/gallery/admin/:type/:id', authMiddleware, async (req, res) => {
 })
 
 // Admin API - Delete single image from album
-app.delete('/api/gallery/admin/:type/:id/image', authMiddleware, async (req, res) => {
+app.delete('/api/gallery/admin/:type/:id/image', validatePathParams(['id']), authMiddleware, async (req, res) => {
   try {
     const { type, id } = req.params
     const { imagePath } = req.body
@@ -2708,7 +2800,7 @@ app.delete('/api/gallery/admin/:type/:id/image', authMiddleware, async (req, res
 })
 
 // Admin API - Update image order in album
-app.put('/api/gallery/admin/:type/:id/reorder', authMiddleware, async (req, res) => {
+app.put('/api/gallery/admin/:type/:id/reorder', validatePathParams(['id']), authMiddleware, async (req, res) => {
   try {
     const { type, id } = req.params
     const { images } = req.body
@@ -3292,21 +3384,36 @@ function ensureWorkflowDir() {
 // Multer storage for workflow files (preserve original filename)
 const workflowStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const workflowPath = path.join(WORKFLOW_FOLDER_PATH, req.params.id, 'files')
+    if (!isSafeSlug(req.params.id)) return cb(new Error('Invalid id'))
+    const workflowPath = safeResolveUnder(WORKFLOW_FOLDER_PATH, req.params.id, 'files')
+    if (!workflowPath) return cb(new Error('Invalid path'))
     if (!fs.existsSync(workflowPath)) {
       fs.mkdirSync(workflowPath, { recursive: true })
     }
     cb(null, workflowPath)
   },
   filename: (req, file, cb) => {
-    // Preserve original filename
-    cb(null, file.originalname)
+    const safe = path.basename(file.originalname || '').replace(/[\x00-\x1f]/g, '')
+    if (!safe || safe === '.' || safe === '..') return cb(new Error('Invalid filename'))
+    cb(null, safe)
   }
 })
 
-const workflowUpload = multer({ 
+// Allowed extensions for workflow attachments. Reject scripts and binaries.
+const WORKFLOW_ALLOWED_EXT = new Set([
+  '.json', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.txt', '.md',
+  '.safetensors', '.ckpt', '.pt', '.bin', '.yaml', '.yml',
+])
+const workflowUpload = multer({
   storage: workflowStorage,
-  limits: { fileSize: 500 * 1024 * 1024 } // 500MB limit for large model files
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB limit for large model files
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase()
+    if (!WORKFLOW_ALLOWED_EXT.has(ext)) {
+      return cb(new Error(`File type ${ext || '(none)'} is not allowed for workflow uploads`))
+    }
+    cb(null, true)
+  },
 })
 
 // Get all workflows
@@ -3558,8 +3665,13 @@ app.delete('/api/workflows/:id/file/:filename', authMiddleware, (req, res) => {
 app.get('/api/workflows/:id/download/:filename', (req, res) => {
   try {
     const { id, filename } = req.params
-    const filePath = path.join(WORKFLOW_FOLDER_PATH, id, 'files', filename)
+    if (!requireSlug('id', id, res)) return
+    if (!requireSlug('filename', filename, res)) return
 
+    const filePath = safeResolveUnder(WORKFLOW_FOLDER_PATH, id, 'files', filename)
+    if (!filePath) {
+      return res.status(400).json({ error: 'Invalid path' })
+    }
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'File not found' })
     }
