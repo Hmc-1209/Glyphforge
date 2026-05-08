@@ -22,6 +22,11 @@
         "hash": "a91c96b",
         "type": "security",
         "message": "Hardened admin login dialog (removed exposed default credentials hint)"
+      },
+      {
+        "hash": "511f831",
+        "type": "security",
+        "message": "Hardened admin authentication — server now refuses to start with missing or malformed credentials"
       }
     ]
   },

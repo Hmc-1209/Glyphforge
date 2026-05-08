@@ -14,6 +14,29 @@ import http from 'http'
 
 dotenv.config()
 
+// ============================================
+// REQUIRED ENVIRONMENT VARIABLES — fail-fast at startup.
+// Hard-coded fallbacks (e.g. JWT_SECRET="default-secret-key", admin/admin
+// password) are forbidden in production: a missing env value would otherwise
+// silently downgrade auth to a publicly-known credential.
+// ============================================
+const REQUIRED_ENV = ['ADMIN_USERNAME', 'ADMIN_PASSWORD_HASH', 'JWT_SECRET']
+const __envMissing = REQUIRED_ENV.filter((k) => !process.env[k] || !String(process.env[k]).trim())
+if (__envMissing.length) {
+  console.error(`[startup] FATAL: missing required environment variables: ${__envMissing.join(', ')}`)
+  console.error('[startup] See .env.example for the expected configuration.')
+  process.exit(1)
+}
+// Sanity-check bcrypt hash format. Common pitfall: docker-compose env_file
+// does NOT perform $$->$ interpolation, so hashes accidentally written with
+// $$ escapes load as 63-char strings starting with $$2b — which bcrypt.compare
+// will reject silently, locking admins out.
+if (!/^\$2[aby]\$\d{2}\$.{53}$/.test(process.env.ADMIN_PASSWORD_HASH)) {
+  console.error('[startup] FATAL: ADMIN_PASSWORD_HASH is not a valid bcrypt hash (expected $2b$10$… 60 chars).')
+  console.error('[startup] If you escaped $ as $$ in .env, replace with single $.')
+  process.exit(1)
+}
+
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -1890,7 +1913,7 @@ function authMiddleware(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     req.admin = decoded
     next()
   } catch (error) {
@@ -1906,12 +1929,11 @@ app.post('/api/gallery/admin/login', async (req, res) => {
   try {
     const { username, password } = req.body
 
-    if (username !== (process.env.ADMIN_USERNAME || 'admin')) {
+    if (username !== process.env.ADMIN_USERNAME) {
       return res.status(401).json({ error: 'Invalid credentials' })
     }
 
-    // If no password hash is set in env, use default password "admin"
-    const passwordHash = process.env.ADMIN_PASSWORD_HASH || await bcrypt.hash('admin', 10)
+    const passwordHash = process.env.ADMIN_PASSWORD_HASH
     const isValid = await bcrypt.compare(password, passwordHash)
 
     if (!isValid) {
@@ -1920,7 +1942,7 @@ app.post('/api/gallery/admin/login', async (req, res) => {
 
     const token = jwt.sign(
       { username, role: 'admin' },
-      process.env.JWT_SECRET || 'default-secret-key',
+      process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     )
 
@@ -2911,7 +2933,7 @@ app.get('/api/requests', (req, res) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1]
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
         if (decoded.role === 'admin') {
           isAdmin = true
         } else if (decoded.discordId) {
@@ -2995,7 +3017,7 @@ app.post('/api/requests', (req, res) => {
 
       const token = authHeader.split(' ')[1]
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
         submittedBy = {
           discordId: decoded.discordId,
           username: decoded.username,
@@ -3160,7 +3182,7 @@ app.put('/api/requests/:id/owner', (req, res) => {
     const token = authHeader.split(' ')[1]
     let discordUser
     try {
-      discordUser = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+      discordUser = jwt.verify(token, process.env.JWT_SECRET)
     } catch (error) {
       return res.status(401).json({ error: 'Invalid Discord token' })
     }
@@ -3625,7 +3647,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         globalName: userData.global_name || userData.username,
         avatar: userData.avatar
       },
-      process.env.JWT_SECRET || 'default-secret-key',
+      process.env.JWT_SECRET,
       { expiresIn: '30d' }
     )
 
@@ -3647,7 +3669,7 @@ app.get('/api/auth/discord/me', (req, res) => {
   const token = authHeader.split(' ')[1]
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     res.json({
       discordId: decoded.discordId,
       username: decoded.username,

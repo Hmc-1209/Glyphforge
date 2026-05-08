@@ -5,7 +5,7 @@ services:
     build: .
     container_name: glyphforge-app
     ports:
-      - "3001:3001"
+      # Public NAS port -> in-container port
       - "40001:3001"
     volumes:
       # Modify to your actual NAS path
