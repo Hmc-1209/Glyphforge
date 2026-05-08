@@ -7,6 +7,11 @@
         "type": "build",
         "message": "Fix Docker image build (npm peer-deps, recharts react-is)",
         "hidden": true
+      },
+      {
+        "hash": "de8fd66",
+        "type": "fix",
+        "message": "New LoRA Discord notifications now include the preview image and show the model name correctly"
       }
     ]
   },

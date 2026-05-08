@@ -285,6 +285,7 @@ function buildDiscordEmbed(eventType, data) {
   let title = `${style.emoji} New ${style.label}`
   let description = ''
   let url = PUBLIC_BASE_URL || undefined
+  let embed_image_url = ''
 
   if (eventType === 'new_lora') {
     title = `${style.emoji} New LoRA: ${data.character || 'Untitled'}`
@@ -292,8 +293,24 @@ function buildDiscordEmbed(eventType, data) {
     if (data.gender)   fields.push({ name: 'Gender', value: String(data.gender), inline: true })
     if (data.company)  fields.push({ name: 'Company', value: String(data.company), inline: true })
     if (data.group)    fields.push({ name: 'Group', value: String(data.group), inline: true })
+    // model is an array of either strings or { name, version } objects
     if (Array.isArray(data.model) && data.model.length) {
-      fields.push({ name: 'Model', value: data.model.join(', '), inline: true })
+      const modelStr = data.model
+        .map((m) => {
+          if (m && typeof m === 'object') {
+            const name = m.name || ''
+            const version = m.version ? ` ${m.version}` : ''
+            return `${name}${version}`.trim()
+          }
+          return String(m)
+        })
+        .filter(Boolean)
+        .join(', ')
+      if (modelStr) fields.push({ name: 'Model', value: modelStr, inline: true })
+    }
+    // Preview thumbnail (the 0.png square thumbnail uploaded by admin)
+    if (data.thumbnailUrl) {
+      embed_image_url = data.thumbnailUrl
     }
   } else if (eventType === 'new_fn_lora') {
     title = `${style.emoji} New Functional LoRA: ${data.title || 'Untitled'}`
@@ -340,6 +357,7 @@ function buildDiscordEmbed(eventType, data) {
   if (description) embed.description = description
   if (fields.length) embed.fields = fields
   if (url) embed.url = url
+  if (embed_image_url) embed.image = { url: embed_image_url }
 
   return {
     username: 'Glyphforge',
@@ -1813,7 +1831,9 @@ app.post('/api/loras', authMiddleware, (req, res) => {
     writeJsonAtomic(path.join(loraPath, 'meta.json'), meta)
 
 
-    sendDiscordNotification('new_lora', { ...meta, id: folderName })
+    // Defer the Discord notification until the thumbnail (0.png) is
+    // uploaded so the embed can include the preview image. Triggered
+    // from POST /api/loras/:id/image/:imageIndex when imageIndex === '0'.
     res.json({ 
       success: true, 
       id: folderName,
@@ -1908,6 +1928,26 @@ app.post('/api/loras/:id/image/:imageIndex', authMiddleware, loraImageUpload.sin
         .toFile(req.file.path)
       
       fs.unlinkSync(tempPath)
+
+      // Fire the deferred new_lora Discord notification on FIRST thumbnail
+      // upload only. Subsequent thumbnail edits don't re-notify.
+      try {
+        const metaPath = path.join(loraPath, 'meta.json')
+        if (fs.existsSync(metaPath)) {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          if (!meta.discordNotified) {
+            const mtime = Date.now()
+            const thumbnailUrl = PUBLIC_BASE_URL
+              ? `${PUBLIC_BASE_URL}/${LORA_FOLDER_NAME}/character/${id}/0.png?v=${mtime}`
+              : ''
+            sendDiscordNotification('new_lora', { ...meta, id, thumbnailUrl })
+            meta.discordNotified = true
+            writeJsonAtomic(metaPath, meta)
+          }
+        }
+      } catch (notifyErr) {
+        console.error('[discord] failed to dispatch deferred new_lora:', notifyErr.message)
+      }
     }
 
 
