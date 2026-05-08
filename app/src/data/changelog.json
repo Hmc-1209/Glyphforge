@@ -17,6 +17,11 @@
         "hash": "6c3e136",
         "type": "fix",
         "message": "Request reorder now persists correctly (drag-and-drop in admin view)"
+      },
+      {
+        "hash": "a91c96b",
+        "type": "security",
+        "message": "Hardened admin login dialog (removed exposed default credentials hint)"
       }
     ]
   },

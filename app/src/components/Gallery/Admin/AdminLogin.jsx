@@ -85,10 +85,6 @@ function AdminLogin({ onLoginSuccess, onClose }) {
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-
-        <div className="admin-login-hint">
-          <small>Default credentials: admin / admin (change in production)</small>
-        </div>
       </div>
     </div>
   )
