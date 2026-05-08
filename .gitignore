@@ -1,3 +1,41 @@
+# Dependencies
 /app/node_modules
-/.claude
+node_modules/
+
+# Build output (built artifacts should not be tracked)
+/app/dist
+dist/
+
+# Backup files (anything ending in .bak or .bak.<timestamp>)
+*.bak
+*.bak.*
+
+# Environment & secrets
 .env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.claude
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test scratchpads (kept under scripts/dev/ if needed)
+/app/test-*.js
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Synology Drive
+.@SynoEAStream
+@eaDir/

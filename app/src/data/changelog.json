@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-05-08",
+    "changes": [
+      {
+        "hash": "7c8385c",
+        "type": "chore",
+        "message": "Repository hygiene — exclude build artifacts and backups, automate changelog entries from commit messages",
+        "hidden": true
+      }
+    ]
+  },
+  {
     "date": "2026-02-11",
     "changes": [
       {
