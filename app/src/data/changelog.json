@@ -52,6 +52,12 @@
         "hash": "b78bf6f",
         "type": "fix",
         "message": "Unknown API endpoints now return a proper 404 (instead of silently serving the SPA)"
+      },
+      {
+        "hash": "5f341ac",
+        "type": "chore",
+        "message": "Removed unused dev scripts and preview pages from the deployment",
+        "hidden": true
       }
     ]
   },

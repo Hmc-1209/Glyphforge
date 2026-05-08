@@ -1,26 +1,22 @@
 {
   "promptFolder": {
-    "path": "/datas/prompt",
+    "path": "D:\\Glyphforge-data\\prompt\\",
     "name": "prompt"
   },
-  "costumeFolder": {
-    "path": "/datas/costume",
-    "name": "costume"
-  },
   "loraFolder": {
-    "path": "/datas/LoRA",
+    "path": "D:\\Glyphforge-data\\LoRA\\",
     "name": "LoRA"
   },
   "galleryFolder": {
-    "path": "/datas/gallery",
+    "path": "D:\\Glyphforge-data\\gallery\\",
     "name": "gallery"
   },
   "requestFolder": {
-    "path": "/datas/requests",
+    "path": "D:\\Glyphforge-data\\requests\\",
     "name": "requests"
   },
   "workflowFolder": {
-    "path": "/datas/workflows",
+    "path": "D:\\Glyphforge-data\\workflows\\",
     "name": "workflows"
   }
 }
