@@ -7,6 +7,11 @@
         "type": "chore",
         "message": "Repository hygiene — exclude build artifacts and backups, automate changelog entries from commit messages",
         "hidden": true
+      },
+      {
+        "hash": "6e22d39",
+        "type": "feat",
+        "message": "Discord login, Fn LoRA tab, notifications panel, and Request submitter identity"
       }
     ]
   },

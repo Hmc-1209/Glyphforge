@@ -2021,3 +2021,122 @@
     font-size: 0.65rem;
   }
 }
+
+/* ============================================
+   Video Volume Controls
+   ============================================ */
+.video-volume-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  border-radius: 24px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+}
+
+.gallery-viewer-image-container:hover .video-volume-controls {
+  opacity: 1;
+}
+
+.volume-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.volume-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--accent-primary);
+}
+
+.volume-toggle-btn svg {
+  flex-shrink: 0;
+}
+
+.volume-slider {
+  width: 80px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.volume-slider:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  background: var(--accent-primary);
+  transform: scale(1.1);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--text-primary);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.volume-slider::-moz-range-thumb:hover {
+  background: var(--accent-primary);
+  transform: scale(1.1);
+}
+
+/* Mobile adjustments for volume controls */
+@media (max-width: 768px) {
+  .video-volume-controls {
+    bottom: 12px;
+    right: 12px;
+    padding: 6px 10px;
+    gap: 6px;
+    opacity: 1; /* Always visible on mobile */
+  }
+
+  .volume-toggle-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .volume-toggle-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .volume-slider {
+    width: 60px;
+  }
+}

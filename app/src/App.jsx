@@ -88,7 +88,9 @@ function App() {
   const [loraCompanyFilter, setLoraCompanyFilter] = useState('all')
   const [loraGroupFilter, setLoraGroupFilter] = useState('all')
   const [loraCharacterFilter, setLoraCharacterFilter] = useState('all')
+  const [loraCharacterCountFilter, setLoraCharacterCountFilter] = useState('all')
   const [isLoraFilterExpanded, setIsLoraFilterExpanded] = useState(false)
+  const [collapsedLoraCompanies, setCollapsedLoraCompanies] = useState(new Set())
 
   // Sort options
   const [promptSortBy, setPromptSortBy] = useState('default')
@@ -96,6 +98,8 @@ function App() {
 
   // Help modal
   const [showHelpModal, setShowHelpModal] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState('')
 
   // Prompt edit mode
   const [isEditingPrompt, setIsEditingPrompt] = useState(false)
@@ -114,8 +118,10 @@ function App() {
   const [editLoraData, setEditLoraData] = useState(null)
   const [pendingLoraThumbnail, setPendingLoraThumbnail] = useState(null) // 0.png (shared)
   const [pendingLoraVersionImages, setPendingLoraVersionImages] = useState({}) // { 'illustrious': [file1, file2], 'haruka': [file1, file2] }
+  const [pendingLoraSafetensors, setPendingLoraSafetensors] = useState({}) // { versionName: File }
   const [editLoraSelectedVersion, setEditLoraSelectedVersion] = useState(0) // index of selected model version
   const loraImageInputRef = useRef(null)
+  const loraSafetensorsInputRef = useRef(null)
   const [uploadingLoraImageIndex, setUploadingLoraImageIndex] = useState(null)
 
   // Fn LoRA state
@@ -124,6 +130,20 @@ function App() {
   const [isFnLoraFilterExpanded, setIsFnLoraFilterExpanded] = useState(false)
   const [selectedFnLora, setSelectedFnLora] = useState(null)
   const [selectedFnLoraVersion, setSelectedFnLoraVersion] = useState(0)
+
+  // Fn LoRA edit mode
+  const [isEditingFnLora, setIsEditingFnLora] = useState(false)
+  const [isCreatingFnLora, setIsCreatingFnLora] = useState(false)
+  const [editFnLoraData, setEditFnLoraData] = useState(null)
+  const [pendingFnLoraThumbnail, setPendingFnLoraThumbnail] = useState(null)
+  const [pendingFnLoraVersionImages, setPendingFnLoraVersionImages] = useState({})
+  const [pendingFnLoraSafetensors, setPendingFnLoraSafetensors] = useState({}) // { versionName: File }
+  const [editFnLoraSelectedVersion, setEditFnLoraSelectedVersion] = useState(0)
+  const fnLoraImageInputRef = useRef(null)
+  const fnLoraSafetensorsInputRef = useRef(null)
+
+  // Background upload tracking for Fn LoRA
+  const [backgroundUploads, setBackgroundUploads] = useState({}) // { fnLoraId: { status: 'uploading'|'done'|'error', fileName: string, progress?: number } }
 
   // Costume category state
   const [collapsedCostumeTypes, setCollapsedCostumeTypes] = useState(() => {
@@ -140,9 +160,30 @@ function App() {
   const costumeImageInputRef = useRef(null)
   const [uploadingCostumeImageIndex, setUploadingCostumeImageIndex] = useState(null)
   const [showPromptLogin, setShowPromptLogin] = useState(false)
+  
+  // Notification state
+  const [notifications, setNotifications] = useState({ version: 0, updates: [] })
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [lastSeenVersion, setLastSeenVersion] = useState(() => {
+    return parseInt(localStorage.getItem('glyphforge_notifications_seen') || '0', 10)
+  })
+  const notificationRef = useRef(null)
+  
   const imageInputRef = useRef(null)
   const [uploadingImageIndex, setUploadingImageIndex] = useState(null)
   const [pendingImages, setPendingImages] = useState([null, null]) // Store File objects for upload
+
+  // Track if mousedown started on overlay (for proper drag-to-close prevention)
+  const overlayMouseDownRef = useRef(false)
+  const handleOverlayMouseDown = (e) => {
+    overlayMouseDownRef.current = e.target === e.currentTarget
+  }
+  const handleOverlayClick = (e, closeFunc) => {
+    if (e.target === e.currentTarget && overlayMouseDownRef.current) {
+      closeFunc()
+    }
+    overlayMouseDownRef.current = false
+  }
   const [promptFieldOptions, setPromptFieldOptions] = useState({
     place: [],
     type: [],
@@ -236,6 +277,99 @@ function App() {
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab)
   }, [activeTab])
+
+  // Load notifications on mount
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch('/api/notifications')
+        const data = await response.json()
+        setNotifications(data)
+      } catch (error) {
+        console.error('Failed to load notifications:', error)
+      }
+    }
+    loadNotifications()
+  }, [])
+
+  // Track the version when dropdown was opened (to show unread indicators)
+  const openedAtVersionRef = useRef(lastSeenVersion)
+  
+  // Use refs to track latest values for the click outside handler
+  const showNotificationsRef = useRef(showNotifications)
+  const notificationsVersionRef = useRef(notifications.version)
+  const lastSeenVersionRef = useRef(lastSeenVersion)
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    showNotificationsRef.current = showNotifications
+  }, [showNotifications])
+  
+  useEffect(() => {
+    notificationsVersionRef.current = notifications.version
+  }, [notifications.version])
+  
+  useEffect(() => {
+    lastSeenVersionRef.current = lastSeenVersion
+  }, [lastSeenVersion])
+  
+  // Helper function to mark notifications as read
+  const markNotificationsAsRead = () => {
+    const currentVersion = notificationsVersionRef.current
+    const currentLastSeen = lastSeenVersionRef.current
+    if (currentVersion > currentLastSeen) {
+      localStorage.setItem('glyphforge_notifications_seen', currentVersion.toString())
+      setLastSeenVersion(currentVersion)
+    }
+  }
+
+  // Handle click outside notification dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        // Mark notifications as read when closing by clicking outside
+        if (showNotificationsRef.current) {
+          markNotificationsAsRead()
+        }
+        setShowNotifications(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+  
+  // Mark notifications as seen when dropdown is closed
+  const handleNotificationClick = () => {
+    if (!showNotifications) {
+      // Opening: remember current lastSeenVersion for unread indicators
+      openedAtVersionRef.current = lastSeenVersion
+    } else {
+      // Closing: mark all as read
+      markNotificationsAsRead()
+    }
+    setShowNotifications(!showNotifications)
+  }
+
+  // Check if there are unread notifications
+  const hasUnreadNotifications = notifications.version > lastSeenVersion
+
+  // Format notification timestamp
+  const formatNotificationTime = (timestamp) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now - date
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 0) {
+      return 'Today'
+    } else if (diffDays === 1) {
+      return 'Yesterday'
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    }
+  }
 
   // Save costume collapsed types to localStorage
   useEffect(() => {
@@ -421,6 +555,7 @@ function App() {
       ...prompt,
       editedTitle: prompt.title || '',
       editedPrompt: prompt.prompt,
+      editedNegativePrompt: prompt.negativePrompt || '',
       editedCharacter: prompt.character || 1,
       editedPlace: prompt.place || 'Unknown',
       editedSensitive: prompt.sensitive || 'SFW',
@@ -429,7 +564,8 @@ function App() {
       editedNudity: prompt.nudity || 'Unknown',
       editedStability: prompt.stability || 1,
       editedAuthor: prompt.author || 'dANNY',
-      editedImages: [...prompt.images]
+      editedImages: [...prompt.images],
+      editedUsedFnLoras: prompt.usedFnLoras || []
     })
     setIsEditingPrompt(true)
     setIsCreatingPrompt(false)
@@ -440,6 +576,7 @@ function App() {
       id: null,
       editedTitle: '',
       editedPrompt: '',
+      editedNegativePrompt: '',
       editedCharacter: 1,
       editedPlace: '',
       editedSensitive: 'SFW',
@@ -448,7 +585,8 @@ function App() {
       editedNudity: '',
       editedStability: 1,
       editedAuthor: 'dANNY',
-      editedImages: []
+      editedImages: [],
+      editedUsedFnLoras: []
     })
     setPendingImages([null, null])
     setIsEditingPrompt(true)
@@ -475,6 +613,9 @@ function App() {
       return
     }
 
+    setIsLoading(true)
+    setLoadingMessage(isCreatingPrompt ? 'Creating prompt...' : 'Updating prompt...')
+
     try {
       const token = localStorage.getItem('adminToken')
       
@@ -496,6 +637,7 @@ function App() {
           body: JSON.stringify({
             title: editPromptData.editedTitle,
             prompt: editPromptData.editedPrompt,
+            negativePrompt: editPromptData.editedNegativePrompt,
             character: parseInt(editPromptData.editedCharacter),
             place: editPromptData.editedPlace,
             sensitive: editPromptData.editedSensitive,
@@ -503,7 +645,8 @@ function App() {
             view: editPromptData.editedView,
             nudity: editPromptData.editedNudity,
             stability: parseInt(editPromptData.editedStability),
-            author: editPromptData.editedAuthor
+            author: editPromptData.editedAuthor,
+            usedFnLoras: editPromptData.editedUsedFnLoras || []
           })
         })
 
@@ -531,6 +674,7 @@ function App() {
           body: JSON.stringify({
             title: editPromptData.editedTitle,
             prompt: editPromptData.editedPrompt,
+            negativePrompt: editPromptData.editedNegativePrompt,
             character: parseInt(editPromptData.editedCharacter),
             place: editPromptData.editedPlace,
             sensitive: editPromptData.editedSensitive,
@@ -538,7 +682,8 @@ function App() {
             view: editPromptData.editedView,
             nudity: editPromptData.editedNudity,
             stability: parseInt(editPromptData.editedStability),
-            author: editPromptData.editedAuthor
+            author: editPromptData.editedAuthor,
+            usedFnLoras: editPromptData.editedUsedFnLoras || []
           })
         })
 
@@ -560,6 +705,9 @@ function App() {
     } catch (error) {
       console.error('Failed to save prompt:', error)
       alert('Failed to save prompt')
+    } finally {
+      setIsLoading(false)
+      setLoadingMessage('')
     }
   }
 
@@ -687,6 +835,9 @@ function App() {
       return
     }
 
+    setIsLoading(true)
+    setLoadingMessage(isCreatingCostume ? 'Creating costume...' : 'Updating costume...')
+
     try {
       const token = localStorage.getItem('adminToken')
       
@@ -776,6 +927,9 @@ function App() {
     } catch (error) {
       console.error('Failed to save costume:', error)
       alert('Failed to save costume')
+    } finally {
+      setIsLoading(false)
+      setLoadingMessage('')
     }
   }
 
@@ -858,6 +1012,7 @@ function App() {
       editedCompany: lora.company || '',
       editedGroup: lora.group || '',
       editedGender: lora.gender || 'Girl',
+      editedCharacterCount: lora.characterCount || 1,
       editedModel: modelArray,
       editedModelJson: JSON.stringify(modelArray, null, 2),
       editedLink: lora.link || '',
@@ -879,6 +1034,7 @@ function App() {
       editedCompany: '',
       editedGroup: '',
       editedGender: 'Girl',
+      editedCharacterCount: 1,
       editedModel: defaultModel,
       editedModelJson: JSON.stringify(defaultModel, null, 2),
       editedLink: '',
@@ -897,6 +1053,7 @@ function App() {
     setEditLoraData(null)
     setPendingLoraThumbnail(null)
     setPendingLoraVersionImages({})
+    setPendingLoraSafetensors({})
     setEditLoraSelectedVersion(0)
   }
 
@@ -919,6 +1076,9 @@ function App() {
       }
     }
 
+    setIsLoading(true)
+    setLoadingMessage(isCreatingLora ? 'Creating LoRA...' : 'Updating LoRA...')
+
     try {
       const token = localStorage.getItem('adminToken')
       const headers = {
@@ -939,6 +1099,7 @@ function App() {
             company: editLoraData.editedCompany,
             group: editLoraData.editedGroup,
             gender: editLoraData.editedGender,
+            characterCount: parseInt(editLoraData.editedCharacterCount) || 1,
             model: modelData,
             link: editLoraData.editedLink,
             prompt: editLoraData.editedPrompt
@@ -958,6 +1119,7 @@ function App() {
             company: editLoraData.editedCompany,
             group: editLoraData.editedGroup,
             gender: editLoraData.editedGender,
+            characterCount: parseInt(editLoraData.editedCharacterCount) || 1,
             model: modelData,
             link: editLoraData.editedLink,
             prompt: editLoraData.editedPrompt
@@ -982,8 +1144,9 @@ function App() {
         for (let i = 0; i < images.length; i++) {
           if (images[i]) {
             const formData = new FormData()
-            formData.append('image', images[i])
+            // IMPORTANT: version must be appended BEFORE image for multer to read it in filename callback
             formData.append('version', versionName.toLowerCase())
+            formData.append('image', images[i])
             await fetch(`/api/loras/${loraId}/image/${i + 1}`, {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${token}` },
@@ -993,13 +1156,73 @@ function App() {
         }
       }
 
-      // Refresh LoRA list
-      await lorasCache.loadData(true)
-
-      handleCloseEditLora()
+      // Check if there are safetensors to upload
+      const safetensorsToUpload = Object.entries(pendingLoraSafetensors).filter(([_, file]) => file)
+      
+      if (safetensorsToUpload.length > 0) {
+        // Close modal first, then upload in background
+        await lorasCache.loadData(true)
+        handleCloseEditLora()
+        setIsLoading(false)
+        setLoadingMessage('')
+        
+        // Start background upload
+        const firstFile = safetensorsToUpload[0][1]
+        setBackgroundUploads(prev => ({
+          ...prev,
+          [`lora-${loraId}`]: { status: 'uploading', fileName: firstFile.name }
+        }))
+        
+        // Upload safetensors in background
+        try {
+          for (const [versionName, file] of safetensorsToUpload) {
+            console.log('Background uploading Character LoRA safetensors:', versionName, file.name)
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('version', versionName)
+            const uploadRes = await fetch(`/api/loras/${loraId}/safetensors`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+              body: formData
+            })
+            const uploadResult = await uploadRes.json()
+            console.log('Background upload result:', uploadResult)
+            if (!uploadRes.ok) throw new Error(uploadResult.error || 'Upload failed')
+          }
+          
+          // Upload complete
+          setBackgroundUploads(prev => ({
+            ...prev,
+            [`lora-${loraId}`]: { status: 'done', fileName: firstFile.name }
+          }))
+          await lorasCache.loadData(true)
+          
+          // Clear the done status after 3 seconds
+          setTimeout(() => {
+            setBackgroundUploads(prev => {
+              const newState = { ...prev }
+              delete newState[`lora-${loraId}`]
+              return newState
+            })
+          }, 3000)
+        } catch (uploadError) {
+          console.error('Background upload error:', uploadError)
+          setBackgroundUploads(prev => ({
+            ...prev,
+            [`lora-${loraId}`]: { status: 'error', fileName: firstFile.name, error: uploadError.message }
+          }))
+        }
+      } else {
+        // No safetensors to upload, just close normally
+        await lorasCache.loadData(true)
+        handleCloseEditLora()
+      }
     } catch (error) {
       console.error('Error saving LoRA:', error)
       alert('Failed to save LoRA: ' + error.message)
+    } finally {
+      setIsLoading(false)
+      setLoadingMessage('')
     }
   }
 
@@ -1024,6 +1247,272 @@ function App() {
       alert('Failed to delete LoRA: ' + error.message)
     }
   }
+
+  // ============================================
+  // Fn LoRA Edit Functions
+  // ============================================
+
+  const handleEditFnLora = (fnLora) => {
+    const modelArray = Array.isArray(fnLora.modelRaw) && fnLora.modelRaw.length > 0 
+      ? fnLora.modelRaw 
+      : (fnLora.versions?.map(v => ({ name: v.name, version: '' })) || [])
+    
+    setEditFnLoraData({
+      ...fnLora,
+      editedTitle: fnLora.title || fnLora.name || '',
+      editedSubTitle: fnLora.subTitle || '',
+      editedType: fnLora.type || '',
+      editedModel: modelArray,
+      editedModelJson: JSON.stringify(modelArray, null, 2),
+      editedLink: fnLora.link || '',
+      editedPrompt: fnLora.prompt || '',
+      editedStability: fnLora.stability || 1,
+      editedSensitive: fnLora.sensitive || 'SFW',
+      editedWeight: fnLora.weight !== null ? fnLora.weight : ''
+    })
+    setPendingFnLoraThumbnail(null)
+    setPendingFnLoraVersionImages({})
+    setEditFnLoraSelectedVersion(0)
+    setIsEditingFnLora(true)
+    setIsCreatingFnLora(false)
+  }
+
+  const handleCreateFnLora = () => {
+    const defaultModel = [{ name: 'Illustrious', version: 'v2.0' }]
+    setEditFnLoraData({
+      id: null,
+      editedTitle: '',
+      editedSubTitle: '',
+      editedType: '',
+      editedModel: defaultModel,
+      editedModelJson: JSON.stringify(defaultModel, null, 2),
+      editedLink: '',
+      editedPrompt: '',
+      editedStability: 1,
+      editedSensitive: 'SFW',
+      editedWeight: ''
+    })
+    setPendingFnLoraThumbnail(null)
+    setPendingFnLoraVersionImages({})
+    setEditFnLoraSelectedVersion(0)
+    setIsEditingFnLora(true)
+    setIsCreatingFnLora(true)
+  }
+
+  const handleCloseEditFnLora = () => {
+    setIsEditingFnLora(false)
+    setIsCreatingFnLora(false)
+    setEditFnLoraData(null)
+    setPendingFnLoraThumbnail(null)
+    setPendingFnLoraVersionImages({})
+    setPendingFnLoraSafetensors({})
+    setEditFnLoraSelectedVersion(0)
+  }
+
+  const handleUpdateFnLora = async () => {
+    if (!editFnLoraData) return
+
+    if (!editFnLoraData.editedTitle) {
+      alert('Please enter a title')
+      return
+    }
+
+    let modelData = editFnLoraData.editedModel
+    if (editFnLoraData.editedModelJson) {
+      try {
+        modelData = JSON.parse(editFnLoraData.editedModelJson)
+      } catch (e) {
+        alert('Invalid model JSON format')
+        return
+      }
+    }
+
+    setIsLoading(true)
+    setLoadingMessage(isCreatingFnLora ? 'Creating Fn LoRA...' : 'Updating Fn LoRA...')
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+
+      let fnLoraId = editFnLoraData.id
+
+      if (isCreatingFnLora) {
+        const response = await fetch('/api/fn-loras', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            title: editFnLoraData.editedTitle,
+            subTitle: editFnLoraData.editedSubTitle,
+            type: editFnLoraData.editedType,
+            model: modelData,
+            link: editFnLoraData.editedLink,
+            prompt: editFnLoraData.editedPrompt,
+            stability: parseInt(editFnLoraData.editedStability),
+            sensitive: editFnLoraData.editedSensitive,
+            weight: editFnLoraData.editedWeight !== '' ? parseFloat(editFnLoraData.editedWeight) : null
+          })
+        })
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error)
+        fnLoraId = data.id
+      } else {
+        const response = await fetch(`/api/fn-loras/${fnLoraId}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            title: editFnLoraData.editedTitle,
+            subTitle: editFnLoraData.editedSubTitle,
+            type: editFnLoraData.editedType,
+            model: modelData,
+            link: editFnLoraData.editedLink,
+            prompt: editFnLoraData.editedPrompt,
+            stability: parseInt(editFnLoraData.editedStability),
+            sensitive: editFnLoraData.editedSensitive,
+            weight: editFnLoraData.editedWeight !== '' ? parseFloat(editFnLoraData.editedWeight) : null
+          })
+        })
+        if (!response.ok) throw new Error('Failed to update Fn LoRA')
+      }
+
+      // Upload thumbnail
+      if (pendingFnLoraThumbnail) {
+        const formData = new FormData()
+        formData.append('image', pendingFnLoraThumbnail)
+        await fetch(`/api/fn-loras/${fnLoraId}/image/0`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        })
+      }
+
+      // Upload version-specific images
+      for (const [versionName, images] of Object.entries(pendingFnLoraVersionImages)) {
+        for (let i = 0; i < images.length; i++) {
+          if (images[i]) {
+            const formData = new FormData()
+            formData.append('image', images[i])
+            await fetch(`/api/fn-loras/${fnLoraId}/image/${i + 1}?version=${encodeURIComponent(versionName.toLowerCase())}`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+              body: formData
+            })
+          }
+        }
+      }
+
+      // Check if there are safetensors to upload
+      const safetensorsToUpload = Object.entries(pendingFnLoraSafetensors).filter(([_, file]) => file)
+      
+      if (safetensorsToUpload.length > 0) {
+        // Close modal first, then upload in background
+        await fnLorasCache.loadData(true)
+        handleCloseEditFnLora()
+        setIsLoading(false)
+        setLoadingMessage('')
+        
+        // Start background upload
+        const firstFile = safetensorsToUpload[0][1]
+        setBackgroundUploads(prev => ({
+          ...prev,
+          [fnLoraId]: { status: 'uploading', fileName: firstFile.name }
+        }))
+        
+        // Upload safetensors in background
+        try {
+          for (const [versionName, file] of safetensorsToUpload) {
+            console.log('Background uploading safetensors:', versionName, file.name)
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('version', versionName)
+            const uploadRes = await fetch(`/api/fn-loras/${fnLoraId}/safetensors`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+              body: formData
+            })
+            const uploadResult = await uploadRes.json()
+            console.log('Background upload result:', uploadResult)
+            if (!uploadRes.ok) throw new Error(uploadResult.error || 'Upload failed')
+          }
+          
+          // Upload complete
+          setBackgroundUploads(prev => ({
+            ...prev,
+            [fnLoraId]: { status: 'done', fileName: firstFile.name }
+          }))
+          await fnLorasCache.loadData(true)
+          
+          // Clear the done status after 3 seconds
+          setTimeout(() => {
+            setBackgroundUploads(prev => {
+              const newState = { ...prev }
+              delete newState[fnLoraId]
+              return newState
+            })
+          }, 3000)
+        } catch (uploadError) {
+          console.error('Background upload error:', uploadError)
+          setBackgroundUploads(prev => ({
+            ...prev,
+            [fnLoraId]: { status: 'error', fileName: firstFile.name, error: uploadError.message }
+          }))
+        }
+      } else {
+        // No safetensors to upload, just close normally
+        await fnLorasCache.loadData(true)
+        handleCloseEditFnLora()
+      }
+    } catch (error) {
+      console.error('Error saving Fn LoRA:', error)
+      alert('Failed to save Fn LoRA: ' + error.message)
+    } finally {
+      setIsLoading(false)
+      setLoadingMessage('')
+    }
+  }
+
+  const handleDeleteFnLora = async () => {
+    if (!editFnLoraData || !editFnLoraData.id) return
+    if (!confirm('Are you sure you want to delete this Fn LoRA?')) return
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      const response = await fetch(`/api/fn-loras/${editFnLoraData.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (!response.ok) throw new Error('Failed to delete Fn LoRA')
+
+      await fnLorasCache.loadData(true)
+      handleCloseEditFnLora()
+    } catch (error) {
+      console.error('Error deleting Fn LoRA:', error)
+      alert('Failed to delete Fn LoRA: ' + error.message)
+    }
+  }
+
+  const handleFnLoraImageSelect = (index, file) => {
+    if (index === 0) {
+      setPendingFnLoraThumbnail(file)
+    } else {
+      const currentModel = editFnLoraData?.editedModel?.[editFnLoraSelectedVersion]
+      if (currentModel) {
+        const versionName = currentModel.name.toLowerCase()
+        setPendingFnLoraVersionImages(prev => {
+          const versionImages = prev[versionName] || [null, null]
+          const newVersionImages = [...versionImages]
+          newVersionImages[index - 1] = file
+          return { ...prev, [versionName]: newVersionImages }
+        })
+      }
+    }
+  }
+
+  // ============================================
+  // LoRA Image Functions
+  // ============================================
 
   const handleLoraImageSelect = (index, file) => {
     if (index === 0) {
@@ -1180,6 +1669,34 @@ function App() {
       if (aIndex === -1) return 1
       if (bIndex === -1) return -1
       return aIndex - bIndex
+    })
+  }
+
+  // Get unique company list from LoRAs, sorted alphabetically with N/A at the end
+  const getLoraCompanies = () => {
+    const companies = [...new Set(filteredLoras.map(l => l.company || 'N/A'))]
+    return companies.sort((a, b) => {
+      if (a === 'N/A') return 1
+      if (b === 'N/A') return -1
+      return a.localeCompare(b)
+    })
+  }
+
+  // Get LoRAs by company
+  const getLorasByCompany = (company) => {
+    return filteredLoras.filter(l => (l.company || 'N/A') === company)
+  }
+
+  // Toggle company collapse
+  const toggleLoraCompany = (company) => {
+    setCollapsedLoraCompanies(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(company)) {
+        newSet.delete(company)
+      } else {
+        newSet.add(company)
+      }
+      return newSet
     })
   }
 
@@ -1431,9 +1948,18 @@ function App() {
       const companyMatch = loraCompanyFilter === 'all' || l.company === loraCompanyFilter
       const groupMatch = loraGroupFilter === 'all' || l.group === loraGroupFilter
       const characterMatch = loraCharacterFilter === 'all' || l.character === loraCharacterFilter
+      const characterCountMatch = loraCharacterCountFilter === 'all' || String(l.characterCount || 1) === loraCharacterCountFilter
 
-      return genderMatch && modelMatch && companyMatch && groupMatch && characterMatch
+      return genderMatch && modelMatch && companyMatch && groupMatch && characterMatch && characterCountMatch
     })
+
+    // Default sort: by character count first (single before multi), then alphabetically by character name
+    const defaultSort = (a, b) => {
+      const countA = a.characterCount || 1
+      const countB = b.characterCount || 1
+      if (countA !== countB) return countA - countB
+      return (a.character || '').localeCompare(b.character || '')
+    }
 
     // Sort based on loraSortBy
     if (loraSortBy === 'mostCopied') {
@@ -1441,7 +1967,7 @@ function App() {
     } else if (loraSortBy === 'mostDownloaded') {
       return [...filtered].sort((a, b) => (b.downloadCount || 0) - (a.downloadCount || 0))
     }
-    return filtered
+    return [...filtered].sort(defaultSort)
   })()
 
   const filteredLoras = filteredAndSortedLoras
@@ -1457,7 +1983,13 @@ function App() {
   }
 
   // Filter Fn LoRAs based on active filters
-  const filteredFnLoras = fnLoras.filter(l => {
+  // First filter Fn LoRAs by sensitivity
+  const sensitivityFilteredFnLoras = fnLoras.filter(l => {
+    if (sensitivityFilter === 'sfw') return l.sensitive === 'SFW'
+    return true // 'all' shows everything (SFW + NSFW)
+  })
+
+  const filteredFnLoras = sensitivityFilteredFnLoras.filter(l => {
     const typeMatch = fnLoraTypeFilter === 'all' || l.type === fnLoraTypeFilter
     const modelMatch = fnLoraModelFilter === 'all' || l.model === fnLoraModelFilter
     return typeMatch && modelMatch
@@ -1491,7 +2023,7 @@ function App() {
                     setOpenDropdown(null)
                   }}
                 >
-                  All ({fnLoras.length})
+                  All ({sensitivityFilteredFnLoras.length})
                 </div>
                 {options.map(option => (
                   <div
@@ -1524,32 +2056,9 @@ function App() {
           className={`sensitivity-toggle ${sensitivityFilter === 'all' ? 'nsfw-mode' : ''}`}
           onClick={() => setSensitivityFilter(sensitivityFilter === 'sfw' ? 'all' : 'sfw')}
         >
-          {/* Womb Tattoo Icon - Inside toggle, left side */}
+          {/* NSFW Icon - Inside toggle, left side */}
           <div className={`womb-tattoo-icon ${sensitivityFilter === 'all' ? 'visible' : ''}`}>
-            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Womb tattoo design - traditional style */}
-              {/* Main inverted heart/womb shape */}
-              <path d="M20 4 C14 4 8 8 8 14 C8 20 14 28 20 36 C26 28 32 20 32 14 C32 8 26 4 20 4Z" 
-                fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.9"/>
-              {/* Inner womb shape */}
-              <path d="M20 8 C16 8 12 11 12 15 C12 19 16 25 20 30 C24 25 28 19 28 15 C28 11 24 8 20 8Z" 
-                fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.7"/>
-              {/* Central vertical line with diamond */}
-              <path d="M20 12 L20 26" stroke="currentColor" strokeWidth="0.8" opacity="0.8"/>
-              <path d="M20 10 L22 13 L20 16 L18 13 Z" fill="currentColor" opacity="0.6"/>
-              {/* Decorative side curves */}
-              <path d="M14 12 Q10 16 14 20" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.6"/>
-              <path d="M26 12 Q30 16 26 20" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.6"/>
-              {/* Bottom decorative element */}
-              <path d="M16 22 Q20 26 24 22" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.7"/>
-              {/* Top wing curves */}
-              <path d="M12 8 Q8 4 4 6" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.5"/>
-              <path d="M28 8 Q32 4 36 6" stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.5"/>
-              {/* Small accent dots */}
-              <circle cx="20" cy="19" r="1.2" fill="currentColor" opacity="0.8"/>
-              <circle cx="16" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
-              <circle cx="24" cy="15" r="0.8" fill="currentColor" opacity="0.5"/>
-            </svg>
+            <img src="/nsfw-icon.png" alt="NSFW" />
           </div>
           <div className={`toggle-slider ${sensitivityFilter}`}></div>
         </div>
@@ -1857,7 +2366,7 @@ function App() {
                     >
                       <div
                         className="prompt-thumbnail"
-                        style={{ backgroundImage: `url(${item.thumbnail})` }}
+                        style={{ backgroundImage: `url("${encodeURI(item.thumbnail)}")` }}
                       ></div>
                       <div className="prompt-info">
                         <h4>{item.title || ''}</h4>
@@ -1878,6 +2387,48 @@ function App() {
                   <p>Browse and download LoRA models</p>
                 </div>
                 <div className="tab-header-actions">
+                  {/* Notification Bell */}
+                  <div className="notification-container" ref={notificationRef}>
+                    <button
+                      className="notification-bell"
+                      onClick={handleNotificationClick}
+                      title="Updates"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                      {hasUnreadNotifications && <span className="notification-badge" />}
+                    </button>
+                    {showNotifications && (
+                      <div className="notification-dropdown">
+                        <div className="notification-header">
+                          <span>Updates</span>
+                          {notifications.updates.length > 0 && (
+                            <span className="notification-count">{notifications.updates.length}</span>
+                          )}
+                        </div>
+                        <div className="notification-list">
+                          {notifications.updates.length === 0 ? (
+                            <div className="notification-empty">No updates yet</div>
+                          ) : (
+                            notifications.updates.map((notif) => {
+                              const isUnread = notif.id > openedAtVersionRef.current
+                              return (
+                                <div key={notif.id} className={`notification-item ${isUnread ? 'unread' : ''}`}>
+                                  {isUnread && <span className="notification-item-badge" />}
+                                  <div className="notification-content">
+                                    <div className="notification-message">{notif.message}</div>
+                                    <div className="notification-time">{formatNotificationTime(notif.timestamp)}</div>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <button
                     className={`admin-toggle-btn ${adminMode ? 'active' : ''}`}
                     onClick={handleLoraAdminClick}
@@ -1953,6 +2504,18 @@ function App() {
                         (val) => val === 'all' ? `All (${loras.length})` : val
                       )}
 
+                      {/* Character Count Filter */}
+                      {renderLoraFilter(
+                        'Char Count',
+                        'characterCount',
+                        loraCharacterCountFilter,
+                        setLoraCharacterCountFilter,
+                        getLoraUniqueValues('characterCount').length > 0 
+                          ? getLoraUniqueValues('characterCount').map(v => String(v))
+                          : ['1'],
+                        (val) => val === 'all' ? `All (${loras.length})` : `${val} char`
+                      )}
+
                       {/* Sort Dropdown */}
                       {renderSortDropdown(loraSortBy, setLoraSortBy, [
                         { value: 'default', label: 'Default' },
@@ -1968,41 +2531,97 @@ function App() {
                 </div>
               </div>
 
-              <div className="content-section">
-                <div className="lora-grid">
-                  {/* Add New LoRA Card (Admin Mode Only) */}
-                  {adminMode && (
-                    <div
-                      className="lora-card add-new-card"
-                      onClick={handleCreateLora}
-                    >
-                      <div className="lora-preview add-new-preview">
-                        <span className="add-new-icon">+</span>
-                      </div>
-                      <div className="lora-info">
-                        <h4 className="lora-character">Add New</h4>
-                        <p className="lora-cloth">LoRA</p>
-                      </div>
-                    </div>
-                  )}
-                  {filteredLoras.map((lora) => (
-                    <div
-                      key={lora.id}
-                      className={`lora-card ${adminMode ? 'admin-mode' : ''}`}
-                      onClick={() => adminMode ? handleEditLora(lora) : setSelectedLora(lora)}
-                    >
-                      <div
-                        className="lora-preview"
-                        style={{ backgroundImage: `url(${lora.thumbnail})` }}
-                      ></div>
-                      <div className="lora-info">
-                        <h4 className="lora-character">{lora.character}</h4>
-                        <p className="lora-cloth">{lora.cloth || '-'}</p>
-                        {adminMode && <span className="edit-indicator">✎ Edit</span>}
-                      </div>
-                    </div>
-                  ))}
+              {/* Add New LoRA Button (Admin Mode Only) */}
+              {adminMode && (
+                <div style={{ padding: '0 1rem 1rem' }}>
+                  <button
+                    className="admin-btn admin-btn-primary"
+                    onClick={handleCreateLora}
+                    style={{ width: '100%' }}
+                  >
+                    + Add New LoRA
+                  </button>
                 </div>
+              )}
+
+              <div className="lora-categories">
+                {getLoraCompanies().map((company) => {
+                  const companyLoras = getLorasByCompany(company)
+                  const totalCompanyLoras = loras.filter(l => (l.company || 'N/A') === company).length
+                  const isCollapsed = collapsedLoraCompanies.has(company)
+
+                  if (totalCompanyLoras === 0) return null
+
+                  return (
+                    <div key={company} className="lora-category-section">
+                      <div
+                        className="lora-category-header"
+                        onClick={() => toggleLoraCompany(company)}
+                      >
+                        <span className={`lora-category-arrow ${isCollapsed ? '' : 'expanded'}`}>
+                          ▶
+                        </span>
+                        <h3 className="lora-category-title">
+                          {company}
+                        </h3>
+                        <span className="lora-category-count">
+                          {companyLoras.length !== totalCompanyLoras 
+                            ? `${companyLoras.length} / ${totalCompanyLoras}` 
+                            : totalCompanyLoras}
+                        </span>
+                      </div>
+
+                      {!isCollapsed && (
+                        <div className="lora-grid">
+                          {companyLoras.length > 0 ? (
+                            companyLoras.map((lora) => {
+                              const uploadStatus = backgroundUploads[`lora-${lora.id}`]
+                              return (
+                                <div
+                                  key={lora.id}
+                                  className={`lora-card ${adminMode ? 'admin-mode' : ''} ${uploadStatus?.status === 'uploading' ? 'uploading' : ''}`}
+                                  onClick={() => uploadStatus?.status === 'uploading' ? null : (adminMode ? handleEditLora(lora) : setSelectedLora(lora))}
+                                  style={uploadStatus?.status === 'uploading' ? { cursor: 'wait', opacity: 0.7 } : {}}
+                                >
+                                  <div
+                                    className="lora-preview"
+                                    style={{ backgroundImage: `url("${encodeURI(lora.thumbnail)}")` }}
+                                  >
+                                    {uploadStatus?.status === 'uploading' && (
+                                      <div className="upload-overlay">
+                                        <div className="upload-spinner"></div>
+                                        <span>Uploading...</span>
+                                      </div>
+                                    )}
+                                    {uploadStatus?.status === 'done' && (
+                                      <div className="upload-overlay done">
+                                        <span>✓ Done</span>
+                                      </div>
+                                    )}
+                                    {uploadStatus?.status === 'error' && (
+                                      <div className="upload-overlay error">
+                                        <span>✗ Failed</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="lora-info">
+                                    <h4 className="lora-character">{lora.character}</h4>
+                                    <p className="lora-cloth">{lora.cloth || '-'}</p>
+                                    {adminMode && !uploadStatus && <span className="edit-indicator">✎ Edit</span>}
+                                  </div>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <div className="lora-category-empty">
+                              No LoRAs visible (filtered)
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -2014,6 +2633,28 @@ function App() {
                   <h2>Functional LoRA</h2>
                   <p>Browse and download functional LoRA models</p>
                 </div>
+                <div className="tab-header-actions">
+                  <button
+                    className="help-button"
+                    onClick={() => setShowHelpModal(true)}
+                    title="Help"
+                  >
+                    ?
+                  </button>
+                  <button
+                    className={`admin-toggle-btn ${adminMode ? 'active' : ''}`}
+                    onClick={() => {
+                      if (!isLoggedIn) {
+                        setShowPromptLogin(true)
+                      } else {
+                        setAdminMode(!adminMode)
+                      }
+                    }}
+                    title={isLoggedIn ? (adminMode ? 'Exit Admin Mode' : 'Enter Admin Mode') : 'Admin Login'}
+                  >
+                    {adminMode ? '🔓 Admin Mode' : (isLoggedIn ? '🔒 Admin' : '🔐 Login')}
+                  </button>
+                </div>
               </div>
 
               <div className="filter-container">
@@ -2024,7 +2665,7 @@ function App() {
                   <span>Filters</span>
                   <span className={`filter-arrow ${isFnLoraFilterExpanded ? 'expanded' : ''}`}>▼</span>
                   <span className="filter-count">
-                    {filteredFnLoras.length} / {fnLoras.length}
+                    {filteredFnLoras.length} / {sensitivityFilteredFnLoras.length}
                   </span>
                 </button>
 
@@ -2038,7 +2679,7 @@ function App() {
                         fnLoraTypeFilter,
                         setFnLoraTypeFilter,
                         getFnLoraUniqueValues('type'),
-                        (val) => val === 'all' ? `All (${fnLoras.length})` : val
+                        (val) => val === 'all' ? `All (${sensitivityFilteredFnLoras.length})` : val
                       )}
 
                       {/* Model Filter */}
@@ -2048,12 +2689,12 @@ function App() {
                         fnLoraModelFilter,
                         setFnLoraModelFilter,
                         getFnLoraUniqueValues('model'),
-                        (val) => val === 'all' ? `All (${fnLoras.length})` : val
+                        (val) => val === 'all' ? `All (${sensitivityFilteredFnLoras.length})` : val
                       )}
                     </div>
 
                     <div className="filter-info">
-                      Showing {filteredFnLoras.length} of {fnLoras.length} Functional LoRAs
+                      Showing {filteredFnLoras.length} of {sensitivityFilteredFnLoras.length} Functional LoRAs
                     </div>
                   </div>
                 </div>
@@ -2061,22 +2702,59 @@ function App() {
 
               <div className="content-section">
                 <div className="lora-grid">
-                  {filteredFnLoras.map((fnLora) => (
+                  {/* Add New Fn LoRA Card (Admin Mode Only) */}
+                  {adminMode && (
                     <div
-                      key={fnLora.id}
-                      className="lora-card"
-                      onClick={() => setSelectedFnLora(fnLora)}
+                      className="lora-card add-new-card"
+                      onClick={handleCreateFnLora}
                     >
-                      <div
-                        className="lora-preview"
-                        style={{ backgroundImage: `url(${fnLora.thumbnail})` }}
-                      ></div>
+                      <div className="lora-preview add-new-preview">
+                        <span className="add-new-icon">+</span>
+                      </div>
                       <div className="lora-info">
-                        <h4 className="lora-character">{fnLora.title}</h4>
-                        <p className="lora-cloth">{fnLora.subTitle || '-'}</p>
+                        <h4 className="lora-character">Add New</h4>
+                        <p className="lora-cloth">Fn LoRA</p>
                       </div>
                     </div>
-                  ))}
+                  )}
+                  {filteredFnLoras.map((fnLora) => {
+                    const uploadStatus = backgroundUploads[fnLora.id]
+                    return (
+                      <div
+                        key={fnLora.id}
+                        className={`lora-card ${adminMode ? 'admin-mode' : ''} ${uploadStatus?.status === 'uploading' ? 'uploading' : ''}`}
+                        onClick={() => uploadStatus?.status === 'uploading' ? null : (adminMode ? handleEditFnLora(fnLora) : setSelectedFnLora(fnLora))}
+                        style={uploadStatus?.status === 'uploading' ? { cursor: 'wait', opacity: 0.7 } : {}}
+                      >
+                        <div
+                          className="lora-preview"
+                          style={{ backgroundImage: `url("${encodeURI(fnLora.thumbnail)}")` }}
+                        >
+                          {uploadStatus?.status === 'uploading' && (
+                            <div className="upload-overlay">
+                              <div className="upload-spinner"></div>
+                              <span>Uploading...</span>
+                            </div>
+                          )}
+                          {uploadStatus?.status === 'done' && (
+                            <div className="upload-overlay done">
+                              <span>✓ Done</span>
+                            </div>
+                          )}
+                          {uploadStatus?.status === 'error' && (
+                            <div className="upload-overlay error">
+                              <span>✗ Failed</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="lora-info">
+                          <h4 className="lora-character">{fnLora.title}</h4>
+                          <p className="lora-cloth">{fnLora.subTitle || '-'}</p>
+                          {adminMode && !uploadStatus && <span className="edit-indicator">✎ Edit</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -2753,7 +3431,7 @@ function App() {
       </div>
 
       {selectedPrompt && (
-        <div className="popup-overlay" onClick={closePopup}>
+        <div className="popup-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, closePopup)}>
           <div className="popup-content" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={closePopup}>×</button>
 
@@ -2802,23 +3480,66 @@ function App() {
               )}
             </div>
 
-            <button
-              className="copy-button"
-              onClick={() => handleCopyPrompt(selectedPrompt.prompt, selectedPrompt.id, 'prompt')}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              Copy Prompt
-            </button>
+            {selectedPrompt.usedFnLoras && selectedPrompt.usedFnLoras.length > 0 && (
+              <div className="prompt-fn-loras-section">
+                <span className="prompt-fn-loras-label">Functional LoRA:</span>
+                <div className="fn-lora-tags">
+                  {selectedPrompt.usedFnLoras.map((loraId, index) => {
+                    const fnLora = fnLoras.find(l => l.id === loraId)
+                    return (
+                      <span 
+                        key={index} 
+                        className="fn-lora-tag clickable"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedPrompt(null) // 關閉 prompt 燈箱
+                          setActiveTab('fnlora') // 切換到 Fn LoRA tab
+                          if (fnLora) {
+                            setTimeout(() => setSelectedFnLora(fnLora), 100) // 開啟對應的 Fn LoRA 燈箱
+                          }
+                        }}
+                        title={fnLora ? `View ${fnLora.name}` : ''}
+                      >
+                        {fnLora ? fnLora.name : loraId}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Copy Buttons */}
+            <div className="copy-buttons-row">
+              <button
+                className="copy-button"
+                onClick={() => handleCopyPrompt(selectedPrompt.prompt, selectedPrompt.id, 'prompt')}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Prompt
+              </button>
+              <button
+                className={`copy-button copy-negative ${!selectedPrompt.negativePrompt ? 'disabled' : ''}`}
+                onClick={() => selectedPrompt.negativePrompt && handleCopyPrompt(selectedPrompt.negativePrompt, selectedPrompt.id, 'prompt')}
+                disabled={!selectedPrompt.negativePrompt}
+                title={selectedPrompt.negativePrompt ? 'Copy negative prompt' : 'No negative prompt'}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Negative
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Costume Popup */}
       {selectedCostume && (
-        <div className="popup-overlay" onClick={() => setSelectedCostume(null)}>
+        <div className="popup-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, () => setSelectedCostume(null))}>
           <div className="popup-content" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={() => setSelectedCostume(null)}>×</button>
 
@@ -2899,7 +3620,7 @@ function App() {
 
       {/* Prompt Edit Modal (Admin Mode) */}
       {isEditingPrompt && editPromptData && (
-        <div className="popup-overlay" onClick={handleCloseEditPrompt}>
+        <div className="popup-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, handleCloseEditPrompt)}>
           <div className="popup-content edit-mode" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={handleCloseEditPrompt}>×</button>
 
@@ -3099,6 +3820,52 @@ function App() {
                 </div>
               </div>
 
+              {/* Fn LoRA Selection */}
+              <div className="edit-field full-width">
+                <label>Fn LoRA Used:</label>
+                <div className="fn-lora-selector">
+                  <div className="fn-lora-selected-tags">
+                    {(editPromptData.editedUsedFnLoras || []).map((loraId, index) => {
+                      const fnLora = fnLoras.find(l => l.id === loraId)
+                      return (
+                        <span key={index} className="fn-lora-tag editable">
+                          {fnLora ? fnLora.name : loraId}
+                          <button
+                            className="fn-lora-tag-remove"
+                            onClick={() => setEditPromptData(prev => ({
+                              ...prev,
+                              editedUsedFnLoras: prev.editedUsedFnLoras.filter(id => id !== loraId)
+                            }))}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                  <select
+                    className="fn-lora-add-select"
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value && !editPromptData.editedUsedFnLoras?.includes(e.target.value)) {
+                        setEditPromptData(prev => ({
+                          ...prev,
+                          editedUsedFnLoras: [...(prev.editedUsedFnLoras || []), e.target.value]
+                        }))
+                      }
+                    }}
+                  >
+                    <option value="">+ Add Fn LoRA...</option>
+                    {fnLoras
+                      .filter(lora => !editPromptData.editedUsedFnLoras?.includes(lora.id))
+                      .map(lora => (
+                        <option key={lora.id} value={lora.id}>{lora.name}</option>
+                      ))
+                    }
+                  </select>
+                </div>
+              </div>
+
               {/* Editable Prompt Text */}
               <div className="edit-field full-width">
                 <label>Prompt:</label>
@@ -3107,6 +3874,16 @@ function App() {
                   onChange={(e) => setEditPromptData(prev => ({ ...prev, editedPrompt: e.target.value }))}
                   rows={6}
                   placeholder="Enter prompt text..."
+                />
+              </div>
+
+              <div className="edit-field full-width">
+                <label>Negative Prompt:</label>
+                <textarea
+                  value={editPromptData.editedNegativePrompt}
+                  onChange={(e) => setEditPromptData(prev => ({ ...prev, editedNegativePrompt: e.target.value }))}
+                  rows={4}
+                  placeholder="Enter negative prompt (optional)..."
                 />
               </div>
             </div>
@@ -3126,7 +3903,7 @@ function App() {
 
       {/* Costume Edit Modal (Admin Mode) */}
       {isEditingCostume && editCostumeData && (
-        <div className="popup-overlay" onClick={handleCloseEditCostume}>
+        <div className="popup-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, handleCloseEditCostume)}>
           <div className="popup-content edit-mode" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={handleCloseEditCostume}>×</button>
 
@@ -3362,7 +4139,7 @@ function App() {
 
       {/* LoRA Edit Modal */}
       {isEditingLora && editLoraData && (
-        <div className="popup-overlay" onClick={handleCloseEditLora}>
+        <div className="popup-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, handleCloseEditLora)}>
           <div className="popup-content edit-mode lora-edit-modal" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={handleCloseEditLora}>×</button>
 
@@ -3553,6 +4330,17 @@ function App() {
               </div>
 
               <div className="edit-field">
+                <label>Char Count:</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editLoraData.editedCharacterCount}
+                  onChange={(e) => setEditLoraData(prev => ({ ...prev, editedCharacterCount: e.target.value }))}
+                  placeholder="1"
+                />
+              </div>
+
+              <div className="edit-field">
                 <label>Company:</label>
                 <input
                   type="text"
@@ -3608,6 +4396,72 @@ function App() {
               ))}
             </datalist>
 
+            {/* Safetensors Upload */}
+            {editLoraData.editedModel && editLoraData.editedModel.length > 0 && (
+              <div className="safetensors-upload-section" style={{ marginTop: '1rem' }}>
+                <label style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', display: 'block' }}>
+                  📁 Upload .safetensors file for: {editLoraData.editedModel[editLoraSelectedVersion]?.name || 'Select a version'}
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <button
+                    className="safetensors-upload-btn"
+                    onClick={() => document.getElementById('lora-safetensors-input')?.click()}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: 'var(--accent-bg)',
+                      border: '1px solid var(--border-hover)',
+                      borderRadius: '6px',
+                      color: 'var(--accent-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {pendingLoraSafetensors[editLoraData.editedModel[editLoraSelectedVersion]?.name?.toLowerCase()] 
+                      ? `✓ ${pendingLoraSafetensors[editLoraData.editedModel[editLoraSelectedVersion]?.name?.toLowerCase()].name}`
+                      : '📁 Upload .safetensors'}
+                  </button>
+                  {pendingLoraSafetensors[editLoraData.editedModel[editLoraSelectedVersion]?.name?.toLowerCase()] && (
+                    <button
+                      onClick={() => {
+                        const versionName = editLoraData.editedModel[editLoraSelectedVersion]?.name?.toLowerCase()
+                        setPendingLoraSafetensors(prev => {
+                          const newState = { ...prev }
+                          delete newState[versionName]
+                          return newState
+                        })
+                      }}
+                      style={{
+                        padding: '0.5rem',
+                        background: 'rgba(239, 68, 68, 0.2)',
+                        border: '1px solid rgba(239, 68, 68, 0.5)',
+                        borderRadius: '6px',
+                        color: '#f87171',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✗
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Hidden input for safetensors upload */}
+            <input
+              id="lora-safetensors-input"
+              type="file"
+              ref={loraSafetensorsInputRef}
+              style={{ display: 'none' }}
+              accept=".safetensors,application/octet-stream"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file && editLoraData.editedModel?.[editLoraSelectedVersion]) {
+                  const versionName = editLoraData.editedModel[editLoraSelectedVersion].name.toLowerCase()
+                  setPendingLoraSafetensors(prev => ({ ...prev, [versionName]: file }))
+                }
+                e.target.value = ''
+              }}
+            />
+
             {/* Actions */}
             <div className="edit-actions">
               {!isCreatingLora && (
@@ -3626,6 +4480,338 @@ function App() {
         </div>
       )}
 
+      {/* Fn LoRA Edit Modal */}
+      {isEditingFnLora && editFnLoraData && (
+        <div className="popup-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, handleCloseEditFnLora)}>
+          <div className="popup-content edit-mode lora-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={handleCloseEditFnLora}>×</button>
+
+            <h3 className="edit-modal-title">
+              {isCreatingFnLora ? '✨ Create New Fn LoRA' : `✏️ Edit: ${editFnLoraData.editedTitle || 'Fn LoRA'}`}
+            </h3>
+
+            {/* Thumbnail Upload (Shared) */}
+            <div className="edit-images">
+              <label style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', display: 'block' }}>
+                📷 Thumbnail (shared across all versions):
+              </label>
+              <div
+                className={`edit-image-placeholder ${pendingFnLoraThumbnail || (!isCreatingFnLora && editFnLoraData.thumbnail) ? 'has-image' : ''}`}
+                onClick={() => {
+                  setUploadingLoraImageIndex(0)
+                  fnLoraImageInputRef.current?.click()
+                }}
+                style={{ aspectRatio: '1', width: '120px', height: '120px' }}
+              >
+                {pendingFnLoraThumbnail ? (
+                  <>
+                    <img src={URL.createObjectURL(pendingFnLoraThumbnail)} alt="Thumbnail preview" />
+                    <div className="edit-image-overlay"><span>Change</span></div>
+                  </>
+                ) : !isCreatingFnLora && editFnLoraData.thumbnail ? (
+                  <>
+                    <img src={editFnLoraData.thumbnail} alt="Thumbnail" />
+                    <div className="edit-image-overlay"><span>Change</span></div>
+                  </>
+                ) : (
+                  <span>📷 Square</span>
+                )}
+              </div>
+            </div>
+
+            {/* Model JSON Editor */}
+            <div className="edit-field full-width" style={{ marginTop: '1rem' }}>
+              <label>Model Versions (JSON):</label>
+              <textarea
+                value={editFnLoraData.editedModelJson || '[]'}
+                onChange={(e) => {
+                  setEditFnLoraData(prev => ({ ...prev, editedModelJson: e.target.value }))
+                  try {
+                    const parsed = JSON.parse(e.target.value)
+                    if (Array.isArray(parsed)) {
+                      setEditFnLoraData(prev => ({ ...prev, editedModel: parsed }))
+                    }
+                  } catch (err) {}
+                }}
+                rows={3}
+                placeholder='[{"name": "Illustrious", "version": "v2.0"}]'
+                style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+              />
+            </div>
+
+            {/* Version Tabs for Images */}
+            {editFnLoraData.editedModel && editFnLoraData.editedModel.length > 0 && (
+              <div className="lora-version-image-section">
+                <label style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '0.5rem', display: 'block' }}>
+                  🖼️ Version Images (click tab to switch):
+                </label>
+                
+                <div className="lora-edit-version-tabs">
+                  {editFnLoraData.editedModel.map((model, idx) => (
+                    <button
+                      key={idx}
+                      className={`lora-edit-version-tab ${editFnLoraSelectedVersion === idx ? 'active' : ''}`}
+                      onClick={() => setEditFnLoraSelectedVersion(idx)}
+                    >
+                      {model.name}
+                    </button>
+                  ))}
+                </div>
+
+                {(() => {
+                  const currentModel = editFnLoraData.editedModel[editFnLoraSelectedVersion]
+                  if (!currentModel) return null
+                  const versionName = currentModel.name.toLowerCase()
+                  const versionImages = pendingFnLoraVersionImages[versionName] || [null, null]
+                  const existingVersion = editFnLoraData.versions?.find(v => v.name.toLowerCase() === versionName)
+                  const existingImages = existingVersion?.images || []
+
+                  const pendingSafetensors = pendingFnLoraSafetensors[versionName]
+                  const existingSafetensors = existingVersion?.fileName
+
+                  return (
+                    <div key={versionName}>
+                      {/* Safetensors Upload */}
+                      <div style={{ marginTop: '0.5rem', marginBottom: '0.75rem' }}>
+                        <label style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', display: 'block', marginBottom: '0.25rem' }}>
+                          📦 LoRA File ({currentModel.name}):
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            className="safetensors-upload-btn"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              document.getElementById('fnlora-safetensors-input')?.click()
+                            }}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              background: pendingSafetensors || existingSafetensors ? 'var(--accent-bg)' : 'var(--bg-secondary)',
+                              border: `1px solid ${pendingSafetensors || existingSafetensors ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
+                              borderRadius: '8px',
+                              color: pendingSafetensors || existingSafetensors ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              fontSize: '0.85rem'
+                            }}
+                          >
+                            {pendingSafetensors ? `✓ ${pendingSafetensors.name}` : 
+                             existingSafetensors ? `✓ ${existingSafetensors}` : 
+                             '📁 Upload .safetensors'}
+                          </button>
+                          {(pendingSafetensors || existingSafetensors) && (
+                            <span style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>
+                              {pendingSafetensors ? '(pending upload)' : '(uploaded)'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Version Images */}
+                      <div className="edit-image-placeholder-container">
+                        <div
+                          className={`edit-image-placeholder ${versionImages[0] || existingImages[0] ? 'has-image' : ''}`}
+                          onClick={() => {
+                            setUploadingLoraImageIndex(1)
+                            fnLoraImageInputRef.current?.click()
+                          }}
+                        >
+                          {versionImages[0] ? (
+                            <>
+                              <img src={URL.createObjectURL(versionImages[0])} alt="Preview 1" />
+                              <div className="edit-image-overlay"><span>Change</span></div>
+                            </>
+                          ) : existingImages[0] ? (
+                            <>
+                              <img src={existingImages[0]} alt="Preview 1" />
+                              <div className="edit-image-overlay"><span>Change</span></div>
+                            </>
+                          ) : (
+                            <span>🖼️ Image 1<br/>({currentModel.name})</span>
+                          )}
+                        </div>
+
+                        <div
+                          className={`edit-image-placeholder ${versionImages[1] || existingImages[1] ? 'has-image' : ''}`}
+                          onClick={() => {
+                            setUploadingLoraImageIndex(2)
+                            fnLoraImageInputRef.current?.click()
+                          }}
+                        >
+                          {versionImages[1] ? (
+                            <>
+                              <img src={URL.createObjectURL(versionImages[1])} alt="Preview 2" />
+                              <div className="edit-image-overlay"><span>Change</span></div>
+                            </>
+                          ) : existingImages[1] ? (
+                            <>
+                              <img src={existingImages[1]} alt="Preview 2" />
+                              <div className="edit-image-overlay"><span>Change</span></div>
+                            </>
+                          ) : (
+                            <span>🖼️ Image 2<br/>({currentModel.name})</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+
+            <input
+              ref={fnLoraImageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                if (e.target.files[0] && uploadingLoraImageIndex !== null) {
+                  handleFnLoraImageSelect(uploadingLoraImageIndex, e.target.files[0])
+                }
+                e.target.value = ''
+              }}
+            />
+
+            {/* Hidden input for safetensors upload */}
+            <input
+              id="fnlora-safetensors-input"
+              ref={fnLoraSafetensorsInputRef}
+              type="file"
+              accept=".safetensors,application/octet-stream"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) {
+                  const currentModel = editFnLoraData?.editedModel?.[editFnLoraSelectedVersion]
+                  if (currentModel) {
+                    const versionName = currentModel.name.toLowerCase()
+                    setPendingFnLoraSafetensors(prev => ({
+                      ...prev,
+                      [versionName]: file
+                    }))
+                  }
+                }
+                e.target.value = ''
+              }}
+            />
+
+            {/* Form Fields */}
+            <div className="edit-field-grid" style={{ marginTop: '1rem' }}>
+              <div className="edit-field">
+                <label>Title: <span className="required">*</span></label>
+                <input
+                  type="text"
+                  value={editFnLoraData.editedTitle}
+                  onChange={(e) => setEditFnLoraData(prev => ({ ...prev, editedTitle: e.target.value }))}
+                  placeholder="e.g., Loli, Style Enhancement"
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Sub-Title:</label>
+                <input
+                  type="text"
+                  value={editFnLoraData.editedSubTitle}
+                  onChange={(e) => setEditFnLoraData(prev => ({ ...prev, editedSubTitle: e.target.value }))}
+                  placeholder="e.g., Bratty, Cute"
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Type:</label>
+                <input
+                  type="text"
+                  list="fnlora-type-options"
+                  value={editFnLoraData.editedType}
+                  onChange={(e) => setEditFnLoraData(prev => ({ ...prev, editedType: e.target.value }))}
+                  placeholder="e.g., Style, Effect"
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Link:</label>
+                <input
+                  type="text"
+                  value={editFnLoraData.editedLink}
+                  onChange={(e) => setEditFnLoraData(prev => ({ ...prev, editedLink: e.target.value }))}
+                  placeholder=""
+                />
+              </div>
+
+              <div className="edit-field">
+                <label>Stability:</label>
+                <select
+                  value={editFnLoraData.editedStability}
+                  onChange={(e) => setEditFnLoraData(prev => ({ ...prev, editedStability: e.target.value }))}
+                >
+                  <option value="1">S1 - High</option>
+                  <option value="2">S2 - Medium</option>
+                  <option value="3">S3 - Low</option>
+                </select>
+              </div>
+
+              <div className="edit-field">
+                <label>Sensitivity:</label>
+                <select
+                  value={editFnLoraData.editedSensitive}
+                  onChange={(e) => setEditFnLoraData(prev => ({ ...prev, editedSensitive: e.target.value }))}
+                >
+                  <option value="SFW">SFW</option>
+                  <option value="NSFW">NSFW</option>
+                </select>
+              </div>
+
+              <div className="edit-field">
+                <label>Weight (0-1):</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="1"
+                  value={editFnLoraData.editedWeight}
+                  onChange={(e) => setEditFnLoraData(prev => ({ ...prev, editedWeight: e.target.value }))}
+                  placeholder="e.g., 0.8"
+                  style={{ width: '80px' }}
+                />
+              </div>
+            </div>
+
+            {/* Prompt */}
+            <div className="edit-field full-width">
+              <label>Prompt:</label>
+              <textarea
+                value={editFnLoraData.editedPrompt}
+                onChange={(e) => setEditFnLoraData(prev => ({ ...prev, editedPrompt: e.target.value }))}
+                rows={4}
+                placeholder="Fn LoRA trigger prompt..."
+              />
+            </div>
+
+            {/* Datalists for autocomplete */}
+            <datalist id="fnlora-type-options">
+              {getFnLoraUniqueValues('type').map(val => (
+                <option key={val} value={val} />
+              ))}
+            </datalist>
+
+            {/* Actions */}
+            <div className="edit-actions">
+              {!isCreatingFnLora && (
+                <button className="cancel-button" onClick={handleDeleteFnLora} style={{ background: 'rgba(239, 68, 68, 0.2)', borderColor: 'rgba(239, 68, 68, 0.5)', color: '#f87171' }}>
+                  🗑️ Delete
+                </button>
+              )}
+              <button className="cancel-button" onClick={handleCloseEditFnLora}>
+                Cancel
+              </button>
+              <button className="update-button" onClick={handleUpdateFnLora}>
+                {isCreatingFnLora ? 'Create Fn LoRA' : 'Update Fn LoRA'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Prompt Admin Login Modal */}
       {showPromptLogin && (
         <AdminLogin
@@ -3635,7 +4821,7 @@ function App() {
       )}
 
       {selectedLora && (
-        <div className="popup-overlay" onClick={() => setSelectedLora(null)}>
+        <div className="popup-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, () => setSelectedLora(null))}>
           <div className="popup-content" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={() => setSelectedLora(null)}>×</button>
 
@@ -3727,6 +4913,12 @@ function App() {
                   <span className="lora-meta-value">{selectedLora.gender}</span>
                 </div>
               )}
+              {(selectedLora.characterCount && selectedLora.characterCount > 0) && (
+                <div className="lora-meta-item">
+                  <span className="lora-meta-label">Char Count:</span>
+                  <span className="lora-meta-value">{selectedLora.characterCount}</span>
+                </div>
+              )}
               {selectedLora.model && (
                 <div className="lora-meta-item">
                   <span className="lora-meta-label">Model:</span>
@@ -3734,6 +4926,13 @@ function App() {
                 </div>
               )}
             </div>
+
+            {/* Multi-character warning */}
+            {selectedLora.characterCount && selectedLora.characterCount > 1 && (
+              <div className="multi-char-warning">
+                ⚠️ Multi-character LoRA may sacrifice some features and require multiple regenerations for better results.
+              </div>
+            )}
 
             <div className="lora-actions">
               {/* External link button - temporarily disabled */}
@@ -3781,7 +4980,7 @@ function App() {
 
       {/* Fn LoRA Detail Modal */}
       {selectedFnLora && (
-        <div className="popup-overlay" onClick={() => setSelectedFnLora(null)}>
+        <div className="popup-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, () => setSelectedFnLora(null))}>
           <div className="popup-content" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={() => setSelectedFnLora(null)}>×</button>
 
@@ -3818,31 +5017,47 @@ function App() {
               )}
             </div>
 
-            <div className="lora-meta-info">
-              {selectedFnLora.title && (
-                <div className="lora-meta-item">
-                  <span className="lora-meta-label">Title:</span>
-                  <span className="lora-meta-value">{selectedFnLora.title}</span>
+            <div className="lora-meta-wrapper">
+              {selectedFnLora.weight !== null && selectedFnLora.weight !== undefined && (
+                <div className="recommended-weight-badge">
+                  <span className="recommended-weight-label">Rec. Weight</span>
+                  <span className="recommended-weight-value">{selectedFnLora.weight}</span>
                 </div>
               )}
-              {selectedFnLora.subTitle && (
-                <div className="lora-meta-item">
-                  <span className="lora-meta-label">Sub-Title:</span>
-                  <span className="lora-meta-value">{selectedFnLora.subTitle}</span>
-                </div>
-              )}
-              {selectedFnLora.type && (
-                <div className="lora-meta-item">
-                  <span className="lora-meta-label">Type:</span>
-                  <span className="lora-meta-value">{selectedFnLora.type}</span>
-                </div>
-              )}
-              {selectedFnLora.model && (
-                <div className="lora-meta-item">
-                  <span className="lora-meta-label">Model:</span>
-                  <span className="lora-meta-value">{selectedFnLora.model}</span>
-                </div>
-              )}
+              <div className="lora-meta-info">
+                {selectedFnLora.title && (
+                  <div className="lora-meta-item">
+                    <span className="lora-meta-label">Title:</span>
+                    <span className="lora-meta-value">{selectedFnLora.title}</span>
+                  </div>
+                )}
+                {selectedFnLora.subTitle && (
+                  <div className="lora-meta-item">
+                    <span className="lora-meta-label">Sub-Title:</span>
+                    <span className="lora-meta-value">{selectedFnLora.subTitle}</span>
+                  </div>
+                )}
+                {selectedFnLora.type && (
+                  <div className="lora-meta-item">
+                    <span className="lora-meta-label">Type:</span>
+                    <span className="lora-meta-value">{selectedFnLora.type}</span>
+                  </div>
+                )}
+                {selectedFnLora.model && (
+                  <div className="lora-meta-item">
+                    <span className="lora-meta-label">Model:</span>
+                    <span className="lora-meta-value">{selectedFnLora.model}</span>
+                  </div>
+                )}
+                {selectedFnLora.stability && (
+                  <div className="lora-meta-item">
+                    <span className="lora-meta-label">Stability:</span>
+                    <span className={`stability-badge stability-${selectedFnLora.stability}`}>
+                      S{selectedFnLora.stability}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="lora-actions">
@@ -3890,64 +5105,154 @@ function App() {
         </div>
       )}
 
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="loading-spinner"></div>
+            <p>{loadingMessage || 'Processing...'}</p>
+          </div>
+        </div>
+      )}
+
       {showHelpModal && (
-        <div className="popup-overlay help-modal-overlay" onClick={() => setShowHelpModal(false)}>
+        <div className="popup-overlay help-modal-overlay" onMouseDown={handleOverlayMouseDown} onClick={(e) => handleOverlayClick(e, () => setShowHelpModal(false))}>
           <div className="help-modal" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={() => setShowHelpModal(false)}>×</button>
 
-            <h2>Prompt Gallery Guide</h2>
+            {activeTab === 'fnlora' ? (
+              <>
+                <h2>Functional LoRA Guide</h2>
 
-            <div className="help-section">
-              <h3>How to Use</h3>
-              <ul>
-                <li>Click on any prompt card to view details and copy the prompt</li>
-                <li>Use filters to narrow down prompts by character count, place, type, and view</li>
-                <li>Sort by "Most Copied" to find popular prompts</li>
-                <li>Toggle between SFW/NSFW content using the top-right switch</li>
-              </ul>
-            </div>
+                <div className="help-section">
+                  <h3>How to Use</h3>
+                  <ul>
+                    <li>Click on any Fn LoRA card to view details and download</li>
+                    <li>Use filters to narrow down by Type or Model</li>
+                    <li>Download the .safetensors file and add to your LoRA folder</li>
+                    <li>Copy the trigger prompt to use with the LoRA</li>
+                  </ul>
+                </div>
 
-            <div className="help-section">
-              <h3>Stability Levels</h3>
-              <p>Stability indicates how consistently a prompt produces expected results:</p>
-              <div className="stability-examples">
-                <div className="stability-example">
-                  <span className="stability-badge stability-1">S1</span>
-                  <div>
-                    <strong>High Stability</strong>
-                    <p>Produces consistent results. Minimal "gacha" needed.</p>
+                <div className="help-section">
+                  <h3>Stability Levels</h3>
+                  <p>Stability indicates how consistently a Functional LoRA produces expected results:</p>
+                  <div className="stability-examples">
+                    <div className="stability-example">
+                      <span className="stability-badge stability-1">S1</span>
+                      <div>
+                        <strong>High Stability</strong>
+                        <p>Effect applies consistently. Works well across different prompts.</p>
+                      </div>
+                    </div>
+                    <div className="stability-example">
+                      <span className="stability-badge stability-2">S2</span>
+                      <div>
+                        <strong>Medium Stability</strong>
+                        <p>Effect may vary. Some prompts work better than others.</p>
+                      </div>
+                    </div>
+                    <div className="stability-example">
+                      <span className="stability-badge stability-3">S3</span>
+                      <div>
+                        <strong>Low Stability</strong>
+                        <p>Effect is inconsistent. May require specific prompts or settings.</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="stability-example">
-                  <span className="stability-badge stability-2">S2</span>
-                  <div>
-                    <strong>Medium Stability</strong>
-                    <p>Moderately consistent. Some variation expected.</p>
-                  </div>
-                </div>
-                <div className="stability-example">
-                  <span className="stability-badge stability-3">S3</span>
-                  <div>
-                    <strong>Low Stability</strong>
-                    <p>Results vary significantly. More "gacha" required.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <div className="help-section">
-              <h3>Meta Information</h3>
-              <p>Each prompt includes:</p>
-              <ul>
-                <li><strong>Author:</strong> Creator of the prompt</li>
-                <li><strong>Character:</strong> Number of characters in the scene</li>
-                <li><strong>Place:</strong> Scene location (Indoor, Outdoor, etc.)</li>
-                <li><strong>Type:</strong> Scene type or action (Standing, Sitting, Running, etc.)</li>
-                <li><strong>View:</strong> Camera angle (Front, Back, Side, etc.)</li>
-              </ul>
-            </div>
+                <div className="help-section">
+                  <h3>Meta Information</h3>
+                  <p>Each Functional LoRA includes:</p>
+                  <ul>
+                    <li><strong>Title:</strong> Name of the LoRA</li>
+                    <li><strong>Sub-Title:</strong> Additional description or variant</li>
+                    <li><strong>Type:</strong> Category (Style, Effect, Concept, etc.)</li>
+                    <li><strong>Model:</strong> Compatible base model versions</li>
+                    <li><strong>Prompt:</strong> Trigger words to activate the LoRA effect</li>
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2>Prompt Gallery Guide</h2>
+
+                <div className="help-section">
+                  <h3>How to Use</h3>
+                  <ul>
+                    <li>Click on any prompt card to view details and copy the prompt</li>
+                    <li>Use filters to narrow down prompts by character count, place, type, and view</li>
+                    <li>Sort by "Most Copied" to find popular prompts</li>
+                    <li>Toggle between SFW/NSFW content using the top-right switch</li>
+                  </ul>
+                </div>
+
+                <div className="help-section">
+                  <h3>Stability Levels</h3>
+                  <p>Stability indicates how consistently a prompt produces expected results:</p>
+                  <div className="stability-examples">
+                    <div className="stability-example">
+                      <span className="stability-badge stability-1">S1</span>
+                      <div>
+                        <strong>High Stability</strong>
+                        <p>Produces consistent results. Minimal "gacha" needed.</p>
+                      </div>
+                    </div>
+                    <div className="stability-example">
+                      <span className="stability-badge stability-2">S2</span>
+                      <div>
+                        <strong>Medium Stability</strong>
+                        <p>Moderately consistent. Some variation expected.</p>
+                      </div>
+                    </div>
+                    <div className="stability-example">
+                      <span className="stability-badge stability-3">S3</span>
+                      <div>
+                        <strong>Low Stability</strong>
+                        <p>Results vary significantly. More "gacha" required.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="help-section">
+                  <h3>Meta Information</h3>
+                  <p>Each prompt includes:</p>
+                  <ul>
+                    <li><strong>Author:</strong> Creator of the prompt</li>
+                    <li><strong>Character:</strong> Number of characters in the scene</li>
+                    <li><strong>Place:</strong> Scene location (Indoor, Outdoor, etc.)</li>
+                    <li><strong>Type:</strong> Scene type or action (Standing, Sitting, Running, etc.)</li>
+                    <li><strong>View:</strong> Camera angle (Front, Back, Side, etc.)</li>
+                  </ul>
+                </div>
+              </>
+            )}
           </div>
         </div>
+      )}
+
+      {/* Background Upload Warning Banner */}
+      {Object.keys(backgroundUploads).length > 0 && Object.values(backgroundUploads).some(u => u.status === 'uploading') && (
+        <div className="upload-warning-banner">
+          <span className="upload-warning-icon">⚠️</span>
+          <span className="upload-warning-text">
+            Upload in progress. Do not refresh the page! ({Object.values(backgroundUploads).filter(u => u.status === 'uploading').map(u => u.fileName).join(', ')})
+          </span>
+          <span className="upload-warning-spinner"></span>
+        </div>
+      )}
+
+      {/* Floating Logout Button */}
+      {isLoggedIn && (
+        <button 
+          className="floating-logout-btn" 
+          onClick={handleAdminLogout}
+          title="Logout"
+        >
+          🚪 Logout
+        </button>
       )}
 
       {/* Scroll to Top Button */}

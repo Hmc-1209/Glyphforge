@@ -544,7 +544,7 @@ label {
   padding: 2rem;
   max-width: 90vw;
   max-height: 90vh;
-  overflow: hidden;
+  overflow-y: auto; /* Changed from hidden to allow scrolling */
   position: relative;
   animation: slideUp 0.3s ease;
   display: flex;
@@ -590,8 +590,7 @@ label {
   display: grid;
   gap: 1.5rem;
   margin-bottom: 1.5rem;
-  max-height: calc(90vh - 250px);
-  overflow: hidden;
+  /* Removed max-height and overflow: hidden to prevent image clipping */
 }
 
 /* Portrait images - display side by side */
@@ -607,8 +606,8 @@ label {
 
 .popup-images img {
   width: 100%;
-  height: 100%;
-  max-height: calc(90vh - 250px);
+  height: auto;
+  max-height: calc(70vh - 200px);
   object-fit: contain;
   border-radius: 8px;
   border: 1px solid var(--border-primary);
@@ -622,7 +621,7 @@ label {
 
 /* Portrait images - limit height when two images are side by side */
 .popup-images.portrait img {
-  max-height: calc(90vh - 300px);
+  max-height: calc(70vh - 200px);
 }
 
 .copy-button {
@@ -1033,6 +1032,7 @@ label {
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.4s ease;
   position: relative;
+  z-index: 100;
 }
 
 .filter-content.expanded {
@@ -1146,7 +1146,7 @@ label {
     0 8px 24px rgba(0, 0, 0, 0.4),
     0 0 0 1px var(--accent-bg),
     inset 0 1px 0 var(--bg-hover);
-  z-index: 1000;
+  z-index: 9999;
   overflow: hidden;
   animation: dropdownFadeIn 0.2s ease;
 }
@@ -1239,9 +1239,11 @@ label {
   animation: tattooGlow 2s ease-in-out infinite alternate;
 }
 
-.womb-tattoo-icon svg {
+.womb-tattoo-icon svg,
+.womb-tattoo-icon img {
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 
 @keyframes tattooGlow {
@@ -1392,6 +1394,45 @@ label {
   .toggle-slider.all {
     left: calc(100% - 31px);
   }
+}
+
+/* LoRA Meta Wrapper */
+.lora-meta-wrapper {
+  position: relative;
+  margin-top: 1.5rem;
+}
+
+/* Recommended Weight Badge */
+.recommended-weight-badge {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(100, 120, 140, 0.85);
+  padding: 5px 12px;
+  border-radius: 4px;
+  z-index: 1;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.recommended-weight-label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.recommended-weight-value {
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.lora-meta-wrapper .lora-meta-info {
+  margin-top: 0;
 }
 
 /* LoRA Meta Info */
@@ -1628,6 +1669,19 @@ label {
   font-size: 0.85rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* Multi-character Warning */
+.multi-char-warning {
+  margin-top: 1rem;
+  padding: 10px 14px;
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 8px;
+  color: #ff9800;
+  font-size: 0.85rem;
+  text-align: center;
+  line-height: 1.4;
 }
 
 /* LoRA Actions */
@@ -2242,6 +2296,32 @@ label {
   color: var(--text-primary);
 }
 
+/* Floating Logout Button */
+.floating-logout-btn {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  background: linear-gradient(145deg, rgba(30, 30, 50, 0.95), rgba(20, 20, 40, 0.95));
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 12px;
+  padding: 10px 18px;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.floating-logout-btn:hover {
+  background: linear-gradient(145deg, rgba(239, 68, 68, 0.25), rgba(239, 68, 68, 0.15));
+  border-color: rgba(239, 68, 68, 0.7);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(239, 68, 68, 0.2);
+}
+
 .prompt-card.admin-mode {
   cursor: pointer;
   position: relative;
@@ -2715,6 +2795,75 @@ label {
   font-size: 0.9rem;
 }
 
+/* LoRA Category Styles */
+.lora-categories {
+  padding: 0 1rem 1rem;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.lora-category-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.lora-category-header {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  user-select: none;
+}
+
+.lora-category-header:hover {
+  background: var(--bg-hover);
+}
+
+.lora-category-arrow {
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+  margin-right: 0.75rem;
+  transition: transform 0.2s ease;
+}
+
+.lora-category-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.lora-category-title {
+  flex: 1;
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.lora-category-count {
+  background: var(--accent-bg);
+  color: var(--accent-secondary);
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.lora-categories .lora-grid {
+  padding: 0 1rem 1rem;
+  max-height: none;
+}
+
+.lora-category-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
 /* Mobile adjustments for costume categories */
 @media (max-width: 768px) {
   .costume-category-header {
@@ -2811,4 +2960,429 @@ label {
     min-width: 220px;
     min-height: 330px;
   }
+}
+
+/* ===== Fn LoRA Tags Styles ===== */
+.prompt-fn-loras-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+}
+
+.prompt-fn-loras-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.prompt-fn-loras {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+}
+
+.fn-lora-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.fn-lora-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  background: linear-gradient(135deg, var(--accent-bg), var(--accent-bg-hover));
+  border: 1px solid var(--accent-primary);
+  border-radius: 15px;
+  color: var(--accent-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.fn-lora-tag.clickable {
+  cursor: pointer;
+}
+
+.fn-lora-tag.clickable:hover {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(var(--accent-primary-rgb), 0.3);
+}
+
+.fn-lora-tag.editable {
+  padding-right: 0.25rem;
+}
+
+.fn-lora-tag-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: 0.25rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  color: var(--accent-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fn-lora-tag-remove:hover {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+/* Fn LoRA Selector in Edit Mode */
+.fn-lora-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fn-lora-selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 32px;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+}
+
+.fn-lora-selected-tags:empty::after {
+  content: 'No Fn LoRA selected';
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+.fn-lora-add-select {
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.fn-lora-add-select:hover {
+  border-color: var(--accent-primary);
+}
+
+.fn-lora-add-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+/* ===== Loading Overlay ===== */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-primary);
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--border-primary);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-content p {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* =============================================
+   Background Upload Styles
+   ============================================= */
+
+/* Upload overlay on cards */
+.upload-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.upload-overlay.done {
+  background: rgba(34, 197, 94, 0.8);
+}
+
+.upload-overlay.error {
+  background: rgba(239, 68, 68, 0.8);
+}
+
+.upload-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.lora-card.uploading {
+  pointer-events: none;
+}
+
+.lora-preview {
+  position: relative;
+}
+
+/* Bottom warning banner */
+.upload-warning-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+  color: #000;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  z-index: 9999;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.upload-warning-icon {
+  font-size: 1.2rem;
+}
+
+.upload-warning-text {
+  flex: 1;
+  text-align: center;
+}
+
+.upload-warning-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-top-color: #000;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* =============================================
+   Notification Bell Styles
+   ============================================= */
+
+.notification-container {
+  position: relative;
+}
+
+.notification-bell {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: background-color 0.2s, color 0.2s;
+  position: relative;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-bell svg {
+  width: 20px;
+  height: 20px;
+}
+
+.notification-bell:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+.notification-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 2px solid var(--bg-primary);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.notification-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 320px;
+  max-height: 400px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+.notification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-primary);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.notification-count {
+  background: var(--accent-primary);
+  color: white;
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+}
+
+.notification-list {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.notification-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.notification-item {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-primary);
+  transition: background-color 0.2s;
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.notification-message {
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 0.25rem;
+}
+
+.notification-time {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+
+/* Unread notification item */
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.notification-item.unread {
+  background: var(--bg-tertiary);
+}
+
+.notification-item-badge {
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  margin-top: 0.5rem;
+}
+
+.notification-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Copy Buttons Row */
+.copy-buttons-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.copy-buttons-row .copy-button {
+  flex: 1;
+}
+
+.copy-button.copy-negative {
+  background: linear-gradient(135deg, #4a4a4a 0%, #3a3a3a 100%);
+}
+
+.copy-button.copy-negative:hover:not(.disabled) {
+  background: linear-gradient(135deg, #5a5a5a 0%, #4a4a4a 100%);
+}
+
+.copy-button.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }

@@ -11,8 +11,28 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
   const [editingRequest, setEditingRequest] = useState(null)
   const [requestType, setRequestType] = useState('lora')
 
-  // Expanded card tracking
-  const [expandedCards, setExpandedCards] = useState(new Set())
+  // Discord OAuth state
+  const [discordUser, setDiscordUser] = useState(null)
+  const [discordRequired, setDiscordRequired] = useState(false)
+  const [discordConfigured, setDiscordConfigured] = useState(false)
+  const [discordLoading, setDiscordLoading] = useState(true)
+
+  // Detail modal
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [selectedRequest, setSelectedRequest] = useState(null)
+
+  // Submitter info modal
+  const [showSubmitterModal, setShowSubmitterModal] = useState(false)
+  const [selectedSubmitter, setSelectedSubmitter] = useState(null)
+
+  // Owner edit modal (for Discord users editing their own requests)
+  const [showOwnerEditModal, setShowOwnerEditModal] = useState(false)
+  const [ownerEditingRequest, setOwnerEditingRequest] = useState(null)
+
+  // Reject reason modal
+  const [showRejectReasonModal, setShowRejectReasonModal] = useState(false)
+  const [rejectReasonRequest, setRejectReasonRequest] = useState(null)
+  const [rejectReasonInput, setRejectReasonInput] = useState('')
 
   // Category collapse state (persisted in localStorage)
   const [collapsedCategories, setCollapsedCategories] = useState(() => {
@@ -42,22 +62,77 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     localStorage.setItem('request-collapsed-categories', JSON.stringify([...collapsedCategories]))
   }, [collapsedCategories])
 
-  // Clear expanded cards when entering admin mode (logged-in users)
-  useEffect(() => {
-    if (adminMode && isLoggedIn) {
-      setExpandedCards(new Set())
-    }
-  }, [adminMode, isLoggedIn])
-
   // Load requests on mount
   useEffect(() => {
     loadRequests()
   }, [])
 
+  // Check Discord OAuth status and handle callback
+  useEffect(() => {
+    const initDiscord = async () => {
+      setDiscordLoading(true)
+      
+      // Check if Discord OAuth is configured
+      try {
+        const statusRes = await fetch('/api/auth/discord/status')
+        const status = await statusRes.json()
+        setDiscordConfigured(status.configured)
+        setDiscordRequired(status.required && status.configured)
+      } catch (error) {
+        console.error('Failed to check Discord status:', error)
+      }
+
+      // Check for Discord token in URL (OAuth callback)
+      const urlParams = new URLSearchParams(window.location.search)
+      const discordToken = urlParams.get('discord_token')
+      if (discordToken) {
+        localStorage.setItem('discordToken', discordToken)
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }
+
+      // Check for existing Discord token
+      const storedToken = localStorage.getItem('discordToken')
+      if (storedToken) {
+        try {
+          const userRes = await fetch('/api/auth/discord/me', {
+            headers: { Authorization: `Bearer ${storedToken}` }
+          })
+          if (userRes.ok) {
+            const userData = await userRes.json()
+            setDiscordUser(userData)
+          } else {
+            // Token invalid, remove it
+            localStorage.removeItem('discordToken')
+          }
+        } catch (error) {
+          console.error('Failed to verify Discord token:', error)
+          localStorage.removeItem('discordToken')
+        }
+      }
+
+      setDiscordLoading(false)
+    }
+
+    initDiscord()
+  }, [])
+
   const loadRequests = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/requests')
+      const headers = {}
+      // Include admin token if logged in to get submittedBy info
+      const adminToken = localStorage.getItem('adminToken')
+      const discordToken = localStorage.getItem('discordToken')
+      
+      if (adminToken) {
+        headers['Authorization'] = `Bearer ${adminToken}`
+      } else if (discordToken) {
+        // Include Discord token so user can see their own submittedBy info
+        headers['Authorization'] = `Bearer ${discordToken}`
+      }
+      
+      const response = await fetch('/api/requests', { headers })
       const data = await response.json()
       setRequests(data)
     } catch (error) {
@@ -66,6 +141,13 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
       setLoading(false)
     }
   }
+
+  // Reload requests when admin mode or Discord user changes (to get/hide submittedBy)
+  useEffect(() => {
+    if (!loading) {
+      loadRequests()
+    }
+  }, [isLoggedIn, discordUser])
 
   const handleOpenModal = () => {
     setShowRequestModal(true)
@@ -110,6 +192,24 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     return Object.keys(errors).length === 0
   }
 
+  const handleDiscordLogin = async () => {
+    try {
+      const response = await fetch('/api/auth/discord')
+      const data = await response.json()
+      if (data.authUrl) {
+        window.location.href = data.authUrl
+      }
+    } catch (error) {
+      console.error('Failed to start Discord login:', error)
+      alert('Failed to start Discord login')
+    }
+  }
+
+  const handleDiscordLogout = () => {
+    localStorage.removeItem('discordToken')
+    setDiscordUser(null)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -117,12 +217,26 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
       return
     }
 
+    // Check if Discord login is required
+    if (discordRequired && !discordUser) {
+      alert('Please login with Discord to submit a request')
+      return
+    }
+
     try {
+      const headers = {
+        'Content-Type': 'application/json'
+      }
+
+      // Add Discord token if logged in
+      const discordToken = localStorage.getItem('discordToken')
+      if (discordToken) {
+        headers['Authorization'] = `Bearer ${discordToken}`
+      }
+
       const response = await fetch('/api/requests', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers,
         body: JSON.stringify({
           type: requestType,
           ...formData,
@@ -135,7 +249,12 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
         handleCloseModal()
         loadRequests()
       } else {
-        alert('Failed to submit request')
+        const error = await response.json()
+        if (response.status === 401) {
+          alert('Please login with Discord to submit a request')
+        } else {
+          alert(error.error || 'Failed to submit request')
+        }
       }
     } catch (error) {
       console.error('Failed to submit request:', error)
@@ -316,6 +435,112 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     onAdminLogout()
   }
 
+  // Owner edit modal handlers
+  const handleOpenOwnerEditModal = (request) => {
+    setOwnerEditingRequest(request)
+    setRequestType(request.type)
+    setFormData({
+      characterName: request.characterName,
+      outfit: request.outfit,
+      livestreamArchive: request.livestreamArchive || '',
+      channelLink: request.channelLink || '',
+      socialMediaLink: request.socialMediaLink || ''
+    })
+    setFormErrors({})
+    setShowOwnerEditModal(true)
+  }
+
+  const handleCloseOwnerEditModal = () => {
+    setShowOwnerEditModal(false)
+    setOwnerEditingRequest(null)
+    setFormData({
+      characterName: '',
+      outfit: '',
+      livestreamArchive: '',
+      channelLink: '',
+      socialMediaLink: ''
+    })
+    setFormErrors({})
+  }
+
+  const handleOwnerEditSubmit = async (e) => {
+    e.preventDefault()
+
+    if (!validateForm()) {
+      return
+    }
+
+    try {
+      const discordToken = localStorage.getItem('discordToken')
+      if (!discordToken) {
+        alert('Please login with Discord to edit your request')
+        return
+      }
+
+      const response = await fetch(`/api/requests/${ownerEditingRequest.id}/owner`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${discordToken}`
+        },
+        body: JSON.stringify({
+          type: requestType,
+          ...formData
+        })
+      })
+
+      if (response.ok) {
+        handleCloseOwnerEditModal()
+        loadRequests()
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to update request')
+      }
+    } catch (error) {
+      console.error('Failed to update request:', error)
+      alert('Failed to update request')
+    }
+  }
+
+  // Reject reason handlers
+  const handleOpenRejectReasonModal = (request) => {
+    setRejectReasonRequest(request)
+    setRejectReasonInput(request.rejectReason || '')
+    setShowRejectReasonModal(true)
+  }
+
+  const handleCloseRejectReasonModal = () => {
+    setShowRejectReasonModal(false)
+    setRejectReasonRequest(null)
+    setRejectReasonInput('')
+  }
+
+  const handleSaveRejectReason = async () => {
+    try {
+      const token = localStorage.getItem('adminToken')
+      const response = await fetch(`/api/requests/${rejectReasonRequest.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          rejectReason: rejectReasonInput
+        })
+      })
+
+      if (response.ok) {
+        handleCloseRejectReasonModal()
+        loadRequests()
+      } else {
+        alert('Failed to save reject reason')
+      }
+    } catch (error) {
+      console.error('Failed to save reject reason:', error)
+      alert('Failed to save reject reason')
+    }
+  }
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return 'var(--text-secondary)'
@@ -336,17 +561,15 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     }
   }
 
-  // Toggle card expand/collapse
-  const toggleCard = (cardId) => {
-    setExpandedCards(prev => {
-      const next = new Set(prev)
-      if (next.has(cardId)) {
-        next.delete(cardId)
-      } else {
-        next.add(cardId)
-      }
-      return next
-    })
+  // Open detail modal
+  const handleOpenDetailModal = (request) => {
+    setSelectedRequest(request)
+    setShowDetailModal(true)
+  }
+
+  const handleCloseDetailModal = () => {
+    setShowDetailModal(false)
+    setSelectedRequest(null)
   }
 
   // Toggle category collapse
@@ -362,12 +585,13 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
     })
   }
 
-  // Filter requests by status, sort by date (earliest first), completed always last
+  // Filter requests by status, sort by date (earliest first), completed and rejected always last
   const sortRequests = (list) => {
     const byDate = (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-    const nonCompleted = list.filter(r => r.status !== 'completed').sort(byDate)
+    const active = list.filter(r => r.status !== 'completed' && r.status !== 'rejected').sort(byDate)
     const completed = list.filter(r => r.status === 'completed').sort(byDate)
-    return [...nonCompleted, ...completed]
+    const rejected = list.filter(r => r.status === 'rejected').sort(byDate)
+    return [...active, ...completed, ...rejected]
   }
 
   const filteredRequests = sortRequests(
@@ -394,17 +618,18 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
 
   // Render a compact request card
   const renderRequestCard = (request, index) => {
-    const isExpanded = expandedCards.has(request.id)
     const isCompleted = request.status === 'completed'
+    const isRejected = request.status === 'rejected'
+    const isDimmed = isCompleted || isRejected
 
     return (
       <div
         key={request.id}
-        className={`request-card ${isExpanded ? 'expanded' : 'compact'} ${isCompleted ? 'completed' : ''}`}
-        onClick={() => !adminMode && toggleCard(request.id)}
+        className={`request-card compact ${isCompleted ? 'completed' : ''} ${isRejected ? 'rejected' : ''}`}
+        onClick={() => !adminMode && handleOpenDetailModal(request)}
       >
-        {/* Completed overlay */}
-        {isCompleted && <div className="request-card-completed-overlay" />}
+        {/* Completed/Rejected overlay */}
+        {isDimmed && <div className="request-card-completed-overlay" />}
 
         {/* Compact view - always visible */}
         <div className="request-card-compact">
@@ -415,11 +640,6 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
             >
               {getStatusText(request.status)}
             </span>
-            {!adminMode && (
-              <span className={`request-expand-icon ${isExpanded ? 'expanded' : ''}`}>
-                ▼
-              </span>
-            )}
           </div>
 
           <div className="request-card-summary">
@@ -427,60 +647,6 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
             <p className="request-outfit">{request.outfit}</p>
           </div>
         </div>
-
-        {/* Expanded details - shown on click */}
-        {isExpanded && (
-          <div className="request-card-details">
-            <div className="request-field">
-              <strong>Archive:</strong>{' '}
-              {request.livestreamArchive ? (
-                <a
-                  href={request.livestreamArchive}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Link
-                </a>
-              ) : (
-                <span className="request-field-empty">-</span>
-              )}
-            </div>
-            <div className="request-field">
-              <strong>Channel:</strong>{' '}
-              {request.channelLink ? (
-                <a
-                  href={request.channelLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Link
-                </a>
-              ) : (
-                <span className="request-field-empty">-</span>
-              )}
-            </div>
-            <div className="request-field">
-              <strong>Social:</strong>{' '}
-              {request.socialMediaLink ? (
-                <a
-                  href={request.socialMediaLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Link
-                </a>
-              ) : (
-                <span className="request-field-empty">-</span>
-              )}
-            </div>
-            <div className="request-date">
-              {new Date(request.createdAt).toLocaleDateString()}
-            </div>
-          </div>
-        )}
 
         {/* Admin controls */}
         {adminMode && (
@@ -496,6 +662,15 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
                 <option value="completed">Completed</option>
                 <option value="rejected">Rejected</option>
               </select>
+              {request.status === 'rejected' && (
+                <button
+                  className="admin-button reject-reason-button"
+                  onClick={() => handleOpenRejectReasonModal(request)}
+                  title="Edit reject reason"
+                >
+                  💬
+                </button>
+              )}
               <button
                 className="admin-button edit-button"
                 onClick={() => handleOpenEditModal(request)}
@@ -525,6 +700,45 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
           <p>Submit or view LoRA and Prompt requests</p>
         </div>
         <div className="request-header-actions">
+          {/* Discord login status */}
+          {discordConfigured && !discordLoading && (
+            <div className="discord-auth-section">
+              {discordUser ? (
+                <div className="discord-user-info">
+                  {discordUser.avatar ? (
+                    <img
+                      src={`https://cdn.discordapp.com/avatars/${discordUser.discordId}/${discordUser.avatar}.png?size=32`}
+                      alt=""
+                      className="discord-avatar"
+                    />
+                  ) : (
+                    <div className="discord-avatar-placeholder">
+                      {discordUser.globalName?.charAt(0) || discordUser.username?.charAt(0)}
+                    </div>
+                  )}
+                  <span className="discord-username">{discordUser.globalName || discordUser.username}</span>
+                  <button
+                    className="discord-logout-btn"
+                    onClick={handleDiscordLogout}
+                    title="Logout from Discord"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="discord-login-btn"
+                  onClick={handleDiscordLogin}
+                  title="Login with Discord to submit requests"
+                >
+                  <svg className="discord-icon" viewBox="0 0 24 24" width="18" height="18">
+                    <path fill="currentColor" d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                  </svg>
+                  Login with Discord
+                </button>
+              )}
+            </div>
+          )}
           <button className="submit-request-button" onClick={handleOpenModal}>
             + New Request
           </button>
@@ -840,6 +1054,307 @@ function Request({ isLoggedIn, adminMode, onAdminLoginSuccess, onAdminLogout, on
           onClose={() => setShowLogin(false)}
           onLoginSuccess={handleLoginSuccess}
         />
+      )}
+
+      {/* Request Detail Modal */}
+      {showDetailModal && selectedRequest && (
+        <div className="request-modal-overlay" onClick={handleCloseDetailModal}>
+          <div className="request-detail-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="request-modal-close" onClick={handleCloseDetailModal}>×</button>
+
+            {/* Header with status */}
+            <div className="detail-modal-header">
+              <span
+                className="request-status-badge large"
+                style={{ backgroundColor: getStatusColor(selectedRequest.status) }}
+              >
+                {getStatusText(selectedRequest.status)}
+              </span>
+              <span className="detail-modal-date">
+                {new Date(selectedRequest.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+
+            {/* Main info */}
+            <div className="detail-modal-main">
+              <h2>{selectedRequest.characterName}</h2>
+              <p className="detail-modal-outfit">{selectedRequest.outfit}</p>
+            </div>
+
+            {/* Reject reason - shown for rejected requests */}
+            {selectedRequest.status === 'rejected' && selectedRequest.rejectReason && (
+              <div className="detail-modal-reject-reason">
+                <strong>Reject Reason:</strong>
+                <p>{selectedRequest.rejectReason}</p>
+              </div>
+            )}
+
+            {/* Links section */}
+            <div className="detail-modal-links">
+              <div className="detail-link-item">
+                <span className="detail-link-label">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/>
+                  </svg>
+                  Livestream Archive
+                </span>
+                {selectedRequest.livestreamArchive ? (
+                  <a
+                    href={selectedRequest.livestreamArchive}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {selectedRequest.livestreamArchive}
+                  </a>
+                ) : (
+                  <span className="detail-link-empty">Not provided</span>
+                )}
+              </div>
+              <div className="detail-link-item">
+                <span className="detail-link-label">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                  </svg>
+                  Channel Link
+                </span>
+                {selectedRequest.channelLink ? (
+                  <a
+                    href={selectedRequest.channelLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {selectedRequest.channelLink}
+                  </a>
+                ) : (
+                  <span className="detail-link-empty">Not provided</span>
+                )}
+              </div>
+              <div className="detail-link-item">
+                <span className="detail-link-label">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                  </svg>
+                  Social Media
+                </span>
+                {selectedRequest.socialMediaLink ? (
+                  <a
+                    href={selectedRequest.socialMediaLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {selectedRequest.socialMediaLink}
+                  </a>
+                ) : (
+                  <span className="detail-link-empty">Not provided</span>
+                )}
+              </div>
+            </div>
+
+            {/* Admin-only: Submitter info */}
+            {isLoggedIn && selectedRequest.submittedBy && (
+              <div className="detail-modal-submitter">
+                <div className="detail-submitter-header">Submitted by</div>
+                <div className="detail-submitter-info">
+                  {selectedRequest.submittedBy.avatar ? (
+                    <img
+                      src={`https://cdn.discordapp.com/avatars/${selectedRequest.submittedBy.discordId}/${selectedRequest.submittedBy.avatar}.png?size=64`}
+                      alt=""
+                      className="detail-submitter-avatar"
+                    />
+                  ) : (
+                    <div className="detail-submitter-avatar-placeholder">
+                      {selectedRequest.submittedBy.globalName?.charAt(0) || selectedRequest.submittedBy.username?.charAt(0) || '?'}
+                    </div>
+                  )}
+                  <div className="detail-submitter-text">
+                    <span className="detail-submitter-name">
+                      {selectedRequest.submittedBy.globalName || selectedRequest.submittedBy.username}
+                    </span>
+                    <span className="detail-submitter-id">
+                      @{selectedRequest.submittedBy.username} • {selectedRequest.submittedBy.discordId}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Owner edit button */}
+            {discordUser && selectedRequest.submittedBy?.discordId === discordUser.discordId && selectedRequest.status === 'pending' && (
+              <button
+                className="owner-edit-btn modal-edit-btn"
+                onClick={() => {
+                  handleCloseDetailModal()
+                  handleOpenOwnerEditModal(selectedRequest)
+                }}
+              >
+                ✎ Edit My Request
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Submitter Info Modal (Admin Only) */}
+      {showSubmitterModal && selectedSubmitter && (
+        <div className="submitter-modal-overlay" onClick={() => setShowSubmitterModal(false)}>
+          <div className="submitter-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="submitter-modal-close" onClick={() => setShowSubmitterModal(false)}>×</button>
+            <h3>Submitter Information</h3>
+            <div className="submitter-modal-body">
+              <div className="submitter-modal-avatar">
+                {selectedSubmitter.avatar ? (
+                  <img
+                    src={`https://cdn.discordapp.com/avatars/${selectedSubmitter.discordId}/${selectedSubmitter.avatar}.png?size=128`}
+                    alt=""
+                  />
+                ) : (
+                  <div className="submitter-modal-avatar-placeholder">
+                    {selectedSubmitter.globalName?.charAt(0) || selectedSubmitter.username?.charAt(0) || '?'}
+                  </div>
+                )}
+              </div>
+              <div className="submitter-modal-details">
+                <div className="submitter-detail-row">
+                  <span className="submitter-detail-label">Display Name</span>
+                  <span className="submitter-detail-value">{selectedSubmitter.globalName || selectedSubmitter.username}</span>
+                </div>
+                <div className="submitter-detail-row">
+                  <span className="submitter-detail-label">Username</span>
+                  <span className="submitter-detail-value">@{selectedSubmitter.username}</span>
+                </div>
+                <div className="submitter-detail-row">
+                  <span className="submitter-detail-label">Discord ID</span>
+                  <span className="submitter-detail-value submitter-id-mono">{selectedSubmitter.discordId}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Owner Edit Modal (for Discord users editing their own requests) */}
+      {showOwnerEditModal && ownerEditingRequest && (
+        <div className="request-modal-overlay" onClick={handleCloseOwnerEditModal}>
+          <div className="request-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="request-modal-close" onClick={handleCloseOwnerEditModal}>×</button>
+
+            <h2>Edit Your Request</h2>
+
+            <form onSubmit={handleOwnerEditSubmit} className="request-form">
+              <div className="form-group">
+                <label htmlFor="owner-characterName">
+                  Character Name <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="owner-characterName"
+                  value={formData.characterName}
+                  onChange={(e) => setFormData({ ...formData, characterName: e.target.value })}
+                  className={formErrors.characterName ? 'error' : ''}
+                  placeholder="Enter character name"
+                />
+                {formErrors.characterName && (
+                  <span className="error-message">{formErrors.characterName}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="owner-outfit">
+                  Outfit Name <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="owner-outfit"
+                  value={formData.outfit}
+                  onChange={(e) => setFormData({ ...formData, outfit: e.target.value })}
+                  className={formErrors.outfit ? 'error' : ''}
+                  placeholder="Enter outfit name"
+                />
+                {formErrors.outfit && (
+                  <span className="error-message">{formErrors.outfit}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="owner-livestreamArchive">
+                  Livestream Archive <span className="required">*</span>
+                </label>
+                <input
+                  type="url"
+                  id="owner-livestreamArchive"
+                  value={formData.livestreamArchive}
+                  onChange={(e) => setFormData({ ...formData, livestreamArchive: e.target.value })}
+                  className={formErrors.livestreamArchive ? 'error' : ''}
+                  placeholder="https://..."
+                />
+                {formErrors.livestreamArchive && (
+                  <span className="error-message">{formErrors.livestreamArchive}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="owner-channelLink">Channel Link</label>
+                <input
+                  type="url"
+                  id="owner-channelLink"
+                  value={formData.channelLink}
+                  onChange={(e) => setFormData({ ...formData, channelLink: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="owner-socialMediaLink">Social Media Link</label>
+                <input
+                  type="url"
+                  id="owner-socialMediaLink"
+                  value={formData.socialMediaLink}
+                  onChange={(e) => setFormData({ ...formData, socialMediaLink: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+
+              <div className="form-actions">
+                <button type="button" onClick={handleCloseOwnerEditModal} className="cancel-button">
+                  Cancel
+                </button>
+                <button type="submit" className="submit-button">
+                  Update Request
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Reason Modal (Admin Only) */}
+      {showRejectReasonModal && rejectReasonRequest && (
+        <div className="submitter-modal-overlay" onClick={handleCloseRejectReasonModal}>
+          <div className="submitter-modal-content reject-reason-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="submitter-modal-close" onClick={handleCloseRejectReasonModal}>×</button>
+            <h3>Reject Reason</h3>
+            <div className="reject-reason-modal-body">
+              <p className="reject-reason-info">
+                Explain why this request was rejected. This will be visible to the submitter.
+              </p>
+              <textarea
+                className="reject-reason-textarea"
+                value={rejectReasonInput}
+                onChange={(e) => setRejectReasonInput(e.target.value)}
+                placeholder="Enter the reason for rejection..."
+                rows={4}
+              />
+              <div className="reject-reason-actions">
+                <button className="cancel-button" onClick={handleCloseRejectReasonModal}>
+                  Cancel
+                </button>
+                <button className="submit-button" onClick={handleSaveRejectReason}>
+                  Save Reason
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

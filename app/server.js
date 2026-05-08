@@ -61,10 +61,39 @@ const PORT = 3001
 app.use(cors())
 app.use(express.json())
 
+// 📝 Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now()
+  const timestamp = new Date().toISOString()
+  
+  // Log incoming request
+  console.log(`[${timestamp}] ⬇️  ${req.method} ${req.path}`)
+  if (req.headers['content-length']) {
+    console.log(`   📦 Content-Length: ${req.headers['content-length']} bytes`)
+  }
+  if (req.headers['content-type']) {
+    console.log(`   📄 Content-Type: ${req.headers['content-type']}`)
+  }
+  
+  // Track response
+  res.on('finish', () => {
+    const duration = Date.now() - start
+    const emoji = res.statusCode < 400 ? '✅' : '❌'
+    console.log(`[${new Date().toISOString()}] ${emoji} ${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`)
+  })
+  
+  next()
+})
+
 // Webhook configuration
 const WEBHOOK_ENABLED = process.env.WEBHOOK_ENABLED === 'true'
 const WEBHOOK_URL = process.env.WEBHOOK_URL
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET
+
+// Discord OAuth2 configuration
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET
+const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || 'http://localhost:3001/api/auth/discord/callback'
 
 // Send webhook notification for new requests
 async function sendWebhookNotification(eventType, data) {
@@ -179,11 +208,17 @@ app.get('/api/prompts', async (req, res) => {
     const prompts = folders.map(folder => {
       const folderPath = path.join(PROMPT_FOLDER_PATH, folder)
       const promptPath = path.join(folderPath, 'prompt.txt')
+      const negativePath = path.join(folderPath, 'negative.txt')
       const metaPath = path.join(folderPath, 'meta.json')
 
       let promptText = ''
       if (fs.existsSync(promptPath)) {
         promptText = fs.readFileSync(promptPath, 'utf-8')
+      }
+
+      let negativePrompt = ''
+      if (fs.existsSync(negativePath)) {
+        negativePrompt = fs.readFileSync(negativePath, 'utf-8')
       }
 
       // Read meta.json if exists
@@ -241,6 +276,7 @@ app.get('/api/prompts', async (req, res) => {
         images: imagesWithCacheBuster,
         imageOrientation: imageOrientation,
         prompt: promptText,
+        negativePrompt: negativePrompt,
         title: meta.title || '',
         character: meta.character || 1,
         place: meta.place || 'Unknown',
@@ -250,7 +286,8 @@ app.get('/api/prompts', async (req, res) => {
         nudity: meta.nudity || 'Unknown',
         stability: meta.stability || null,
         author: meta.author || 'dANNY',
-        copyCount: meta.copyCount || 0
+        copyCount: meta.copyCount || 0,
+        usedFnLoras: meta.usedFnLoras || []
       }
     })
 
@@ -588,6 +625,7 @@ app.get('/api/loras', async (req, res) => {
         company: meta.company || '',
         group: meta.group || '',
         gender: meta.gender || '',
+        characterCount: meta.characterCount || 1,
         model: modelInfo,
         modelRaw: Array.isArray(meta.model) ? meta.model : [], // Raw model array for editing
         copyCount: meta.copyCount || 0,
@@ -1011,6 +1049,9 @@ app.get('/api/fn-loras', async (req, res) => {
         model: modelInfo,
         modelRaw: Array.isArray(meta.model) ? meta.model : [],
         serialNumber: meta['serial-number'] || 0,
+        stability: meta.stability || null,
+        sensitive: meta.sensitive || 'SFW',
+        weight: meta.weight || null,
         copyCount: meta.copyCount || 0,
         downloadCount: meta.downloadCount || 0
       }
@@ -1067,6 +1108,284 @@ app.post('/api/fn-loras/:id/download', (req, res) => {
 })
 
 // ============================================
+// FN LORA CRUD API (Admin)
+// ============================================
+
+// Multer storage for Fn LoRA images
+const fnLoraImageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', req.params.id)
+    if (!fs.existsSync(fnLoraPath)) {
+      fs.mkdirSync(fnLoraPath, { recursive: true })
+    }
+    cb(null, fnLoraPath)
+  },
+  filename: (req, file, cb) => {
+    const imageIndex = req.params.imageIndex || '0'
+    const version = req.query.version || req.body.version || ''
+    if (imageIndex === '0') {
+      cb(null, '0.png')
+    } else if (version) {
+      cb(null, `${imageIndex}(${version}).png`)
+    } else {
+      cb(null, `${imageIndex}.png`)
+    }
+  }
+})
+
+const fnLoraImageUpload = multer({
+  storage: fnLoraImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only image files are allowed'))
+    }
+  }
+})
+
+// Multer storage for Fn LoRA safetensors files
+const fnLoraSafetensorsStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', req.params.id)
+    if (!fs.existsSync(fnLoraPath)) {
+      fs.mkdirSync(fnLoraPath, { recursive: true })
+    }
+    cb(null, fnLoraPath)
+  },
+  filename: (req, file, cb) => {
+    // Keep original filename
+    cb(null, file.originalname)
+  }
+})
+
+const fnLoraSafetensorsUpload = multer({
+  storage: fnLoraSafetensorsStorage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB limit for LoRA files
+  fileFilter: (req, file, cb) => {
+    if (file.originalname.endsWith('.safetensors')) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only .safetensors files are allowed'))
+    }
+  }
+})
+
+// Create new Fn LoRA
+app.post('/api/fn-loras', authMiddleware, (req, res) => {
+  try {
+    const { title, subTitle, type, model, link, prompt, stability, sensitive, weight } = req.body
+    
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' })
+    }
+
+    const folderName = title.replace(/\s+/g, '_')
+    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', folderName)
+
+    if (fs.existsSync(fnLoraPath)) {
+      return res.status(400).json({ error: 'Fn LoRA with this name already exists' })
+    }
+
+    // Find the next available serial number
+    const functionalFolderPath = path.join(LORA_FOLDER_PATH, 'functional')
+    let maxSerialNumber = 0
+    if (fs.existsSync(functionalFolderPath)) {
+      const folders = fs.readdirSync(functionalFolderPath).filter(file => {
+        const filePath = path.join(functionalFolderPath, file)
+        return fs.statSync(filePath).isDirectory() && !file.startsWith('@')
+      })
+      folders.forEach(folder => {
+        const metaPath = path.join(functionalFolderPath, folder, 'meta.json')
+        if (fs.existsSync(metaPath)) {
+          try {
+            const existingMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+            const sn = existingMeta['serial-number'] || 0
+            if (sn > maxSerialNumber) maxSerialNumber = sn
+          } catch (err) {}
+        }
+      })
+    }
+    const nextSerialNumber = maxSerialNumber + 1
+
+    fs.mkdirSync(fnLoraPath, { recursive: true })
+
+    const meta = {
+      title: title,
+      'sub-title': subTitle || '',
+      type: type || '',
+      model: model || [],
+      link: link || '',
+      prompt: prompt || '',
+      stability: stability || 1,
+      sensitive: sensitive || 'SFW',
+      weight: weight !== undefined ? parseFloat(weight) : null,
+      'serial-number': nextSerialNumber,
+      downloadCount: 0,
+      copyCount: 0
+    }
+
+    fs.writeFileSync(path.join(fnLoraPath, 'meta.json'), JSON.stringify(meta, null, 2))
+
+    res.json({ 
+      success: true, 
+      id: folderName,
+      meta: meta
+    })
+  } catch (error) {
+    console.error('Error creating Fn LoRA:', error)
+    res.status(500).json({ error: 'Failed to create Fn LoRA' })
+  }
+})
+
+// Update Fn LoRA metadata
+app.put('/api/fn-loras/:id', authMiddleware, (req, res) => {
+  try {
+    const { id } = req.params
+    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', id)
+    const metaPath = path.join(fnLoraPath, 'meta.json')
+
+    if (!fs.existsSync(fnLoraPath)) {
+      return res.status(404).json({ error: 'Fn LoRA not found' })
+    }
+
+    let meta = {}
+    if (fs.existsSync(metaPath)) {
+      meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+    }
+
+    const { title, subTitle, type, model, link, prompt, stability, sensitive, weight } = req.body
+    if (title !== undefined) meta.title = title
+    if (subTitle !== undefined) meta['sub-title'] = subTitle
+    if (type !== undefined) meta.type = type
+    if (model !== undefined) meta.model = model
+    if (link !== undefined) meta.link = link
+    if (prompt !== undefined) meta.prompt = prompt
+    if (stability !== undefined) meta.stability = stability
+    if (sensitive !== undefined) meta.sensitive = sensitive
+    if (weight !== undefined) meta.weight = weight !== null ? parseFloat(weight) : null
+
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+
+    res.json({ success: true, meta })
+  } catch (error) {
+    console.error('Error updating Fn LoRA:', error)
+    res.status(500).json({ error: 'Failed to update Fn LoRA' })
+  }
+})
+
+// Delete Fn LoRA
+app.delete('/api/fn-loras/:id', authMiddleware, (req, res) => {
+  try {
+    const { id } = req.params
+    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', id)
+
+    if (!fs.existsSync(fnLoraPath)) {
+      return res.status(404).json({ error: 'Fn LoRA not found' })
+    }
+
+    fs.rmSync(fnLoraPath, { recursive: true, force: true })
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting Fn LoRA:', error)
+    res.status(500).json({ error: 'Failed to delete Fn LoRA' })
+  }
+})
+
+// Upload Fn LoRA image
+app.post('/api/fn-loras/:id/image/:imageIndex', authMiddleware, fnLoraImageUpload.single('image'), async (req, res) => {
+  try {
+    const { id, imageIndex } = req.params
+    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', id)
+
+    if (!fs.existsSync(fnLoraPath)) {
+      return res.status(404).json({ error: 'Fn LoRA not found' })
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image uploaded' })
+    }
+
+    if (imageIndex === '0') {
+      const tempPath = req.file.path + '_temp'
+      fs.renameSync(req.file.path, tempPath)
+      
+      await sharp(tempPath)
+        .resize(256, 256, { fit: 'cover' })
+        .png()
+        .toFile(req.file.path)
+      
+      fs.unlinkSync(tempPath)
+    }
+
+    const mtime = fs.statSync(req.file.path).mtimeMs.toString(36)
+    res.json({
+      success: true,
+      path: `/${LORA_FOLDER_NAME}/functional/${id}/${req.file.filename}?v=${mtime}`
+    })
+  } catch (error) {
+    console.error('Error uploading Fn LoRA image:', error)
+    res.status(500).json({ error: 'Failed to upload image' })
+  }
+})
+
+// Upload Fn LoRA safetensors file
+app.post('/api/fn-loras/:id/safetensors', authMiddleware, fnLoraSafetensorsUpload.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const version = req.body.version || 'default'
+    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', id)
+
+    if (!fs.existsSync(fnLoraPath)) {
+      return res.status(404).json({ error: 'Fn LoRA not found' })
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    res.json({
+      success: true,
+      filename: req.file.filename,
+      path: `/${LORA_FOLDER_NAME}/functional/${id}/${req.file.filename}`,
+      version: version
+    })
+  } catch (error) {
+    console.error('Error uploading Fn LoRA safetensors:', error)
+    res.status(500).json({ error: 'Failed to upload safetensors file' })
+  }
+})
+
+// Delete Fn LoRA safetensors file
+app.delete('/api/fn-loras/:id/safetensors/:version', authMiddleware, (req, res) => {
+  try {
+    const { id, version } = req.params
+    const fnLoraPath = path.join(LORA_FOLDER_PATH, 'functional', id)
+    const filename = `${id}(${version}).safetensors`
+    const filePath = path.join(fnLoraPath, filename)
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath)
+      // Also delete corresponding version images
+      const files = fs.readdirSync(fnLoraPath)
+      files.forEach(file => {
+        if (file.includes(`(${version}).png`) && file !== '0.png') {
+          fs.unlinkSync(path.join(fnLoraPath, file))
+        }
+      })
+      res.json({ success: true })
+    } else {
+      res.status(404).json({ error: 'File not found' })
+    }
+  } catch (error) {
+    console.error('Error deleting Fn LoRA safetensors:', error)
+    res.status(500).json({ error: 'Failed to delete safetensors file' })
+  }
+})
+
+// ============================================
 // LORA CRUD API (Admin)
 // ============================================
 
@@ -1082,7 +1401,8 @@ const loraImageStorage = multer.diskStorage({
   filename: (req, file, cb) => {
     const imageIndex = req.params.imageIndex || '0'
     // For images 1 and 2, include version suffix if provided
-    const version = req.body.version || ''
+    // Support both query param and body (query takes precedence, body requires correct FormData order)
+    const version = req.query.version || req.body.version || ''
     if (imageIndex === '0') {
       cb(null, '0.png')
     } else if (version) {
@@ -1105,10 +1425,37 @@ const loraImageUpload = multer({
   }
 })
 
+// Multer storage for Character LoRA safetensors files
+const loraSafetensorsStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const loraPath = path.join(LORA_FOLDER_PATH, 'character', req.params.id)
+    if (!fs.existsSync(loraPath)) {
+      fs.mkdirSync(loraPath, { recursive: true })
+    }
+    cb(null, loraPath)
+  },
+  filename: (req, file, cb) => {
+    // Keep original filename
+    cb(null, file.originalname)
+  }
+})
+
+const loraSafetensorsUpload = multer({
+  storage: loraSafetensorsStorage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB limit for LoRA files
+  fileFilter: (req, file, cb) => {
+    if (file.originalname.endsWith('.safetensors')) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only .safetensors files are allowed'))
+    }
+  }
+})
+
 // Create new LoRA
 app.post('/api/loras', authMiddleware, (req, res) => {
   try {
-    const { character, cloth, company, group, gender, model, link, prompt } = req.body
+    const { character, cloth, company, group, gender, characterCount, model, link, prompt } = req.body
     
     if (!character) {
       return res.status(400).json({ error: 'Character name is required' })
@@ -1153,6 +1500,7 @@ app.post('/api/loras', authMiddleware, (req, res) => {
       cloth: cloth || '',
       company: company || 'N/A',
       group: group || 'N/A',
+      characterCount: characterCount || 1,
       model: model || [],
       link: link || '',
       prompt: prompt || '',
@@ -1192,12 +1540,13 @@ app.put('/api/loras/:id', authMiddleware, (req, res) => {
     }
 
     // Update allowed fields
-    const { character, cloth, company, group, gender, model, link, prompt } = req.body
+    const { character, cloth, company, group, gender, characterCount, model, link, prompt } = req.body
     if (character !== undefined) meta.character = character
     if (cloth !== undefined) meta.cloth = cloth
     if (company !== undefined) meta.company = company
     if (group !== undefined) meta.group = group
     if (gender !== undefined) meta.gender = gender
+    if (characterCount !== undefined) meta.characterCount = characterCount
     if (model !== undefined) meta.model = model
     if (link !== undefined) meta.link = link
     if (prompt !== undefined) meta.prompt = prompt
@@ -1268,6 +1617,53 @@ app.post('/api/loras/:id/image/:imageIndex', authMiddleware, loraImageUpload.sin
   } catch (error) {
     console.error('Error uploading LoRA image:', error)
     res.status(500).json({ error: 'Failed to upload image: ' + error.message })
+  }
+})
+
+// Upload Character LoRA safetensors file
+app.post('/api/loras/:id/safetensors', authMiddleware, loraSafetensorsUpload.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const loraPath = path.join(LORA_FOLDER_PATH, 'character', id)
+
+    if (!fs.existsSync(loraPath)) {
+      return res.status(404).json({ error: 'LoRA not found' })
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No safetensors file uploaded' })
+    }
+
+    console.log('Character LoRA safetensors uploaded:', req.file.originalname, 'to', loraPath)
+
+    res.json({ 
+      success: true, 
+      filename: req.file.filename,
+      path: `/${LORA_FOLDER_NAME}/character/${id}/${req.file.filename}`
+    })
+  } catch (error) {
+    console.error('Error uploading Character LoRA safetensors:', error)
+    res.status(500).json({ error: 'Failed to upload safetensors: ' + error.message })
+  }
+})
+
+// Delete Character LoRA safetensors file
+app.delete('/api/loras/:id/safetensors/:filename', authMiddleware, (req, res) => {
+  try {
+    const { id, filename } = req.params
+    const filePath = path.join(LORA_FOLDER_PATH, 'character', id, filename)
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' })
+    }
+
+    fs.unlinkSync(filePath)
+    console.log('Character LoRA safetensors deleted:', filename)
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting Character LoRA safetensors:', error)
+    res.status(500).json({ error: 'Failed to delete safetensors: ' + error.message })
   }
 })
 
@@ -1542,7 +1938,7 @@ app.post('/api/gallery/admin/login', async (req, res) => {
 // API route - create new prompt (admin only)
 app.post('/api/prompts', authMiddleware, (req, res) => {
   try {
-    const { title, prompt, character, place, sensitive, type, view, nudity, stability, author } = req.body
+    const { title, prompt, negativePrompt, character, place, sensitive, type, view, nudity, stability, author, usedFnLoras } = req.body
 
     // Find next available ID (folder name)
     const existingFolders = fs.readdirSync(PROMPT_FOLDER_PATH)
@@ -1560,6 +1956,11 @@ app.post('/api/prompts', authMiddleware, (req, res) => {
     // Create prompt.txt
     fs.writeFileSync(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
 
+    // Create negative.txt if provided
+    if (negativePrompt && negativePrompt.trim()) {
+      fs.writeFileSync(path.join(newFolderPath, 'negative.txt'), negativePrompt, 'utf-8')
+    }
+
     // Create meta.json
     const meta = {
       title: title || '',
@@ -1571,7 +1972,8 @@ app.post('/api/prompts', authMiddleware, (req, res) => {
       nudity: nudity || 'Unknown',
       stability: stability || 1,
       author: author || 'dANNY',
-      copyCount: 0
+      copyCount: 0,
+      usedFnLoras: usedFnLoras || []
     }
     fs.writeFileSync(path.join(newFolderPath, 'meta.json'), JSON.stringify(meta, null, 2))
 
@@ -1631,10 +2033,11 @@ app.get('/api/prompts/fields', (req, res) => {
 app.put('/api/prompts/:id', authMiddleware, (req, res) => {
   try {
     const { id } = req.params
-    const { title, prompt, character, place, sensitive, type, view, nudity, stability, author } = req.body
+    const { title, prompt, negativePrompt, character, place, sensitive, type, view, nudity, stability, author, usedFnLoras } = req.body
     const folderPath = path.join(PROMPT_FOLDER_PATH, id)
     const metaPath = path.join(folderPath, 'meta.json')
     const promptPath = path.join(folderPath, 'prompt.txt')
+    const negativePath = path.join(folderPath, 'negative.txt')
 
     if (!fs.existsSync(folderPath)) {
       return res.status(404).json({ error: 'Prompt folder not found' })
@@ -1643,6 +2046,16 @@ app.put('/api/prompts/:id', authMiddleware, (req, res) => {
     // Update prompt.txt
     if (prompt !== undefined) {
       fs.writeFileSync(promptPath, prompt, 'utf-8')
+    }
+
+    // Update negative.txt
+    if (negativePrompt !== undefined) {
+      if (negativePrompt.trim()) {
+        fs.writeFileSync(negativePath, negativePrompt, 'utf-8')
+      } else if (fs.existsSync(negativePath)) {
+        // Remove negative.txt if empty
+        fs.unlinkSync(negativePath)
+      }
     }
 
     // Update meta.json
@@ -1661,6 +2074,7 @@ app.put('/api/prompts/:id', authMiddleware, (req, res) => {
     if (nudity !== undefined) meta.nudity = nudity
     if (stability !== undefined) meta.stability = stability
     if (author !== undefined) meta.author = author
+    if (usedFnLoras !== undefined) meta.usedFnLoras = usedFnLoras
 
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
@@ -2324,6 +2738,68 @@ app.put('/api/gallery/admin/:type/:id/reorder', authMiddleware, async (req, res)
   }
 })
 
+// ============================================
+// NOTIFICATIONS API
+// ============================================
+
+const NOTIFICATIONS_FILE = path.join(path.dirname(PROMPT_FOLDER_PATH), 'notifications.json')
+
+// Get notifications
+app.get('/api/notifications', (req, res) => {
+  try {
+    if (!fs.existsSync(NOTIFICATIONS_FILE)) {
+      return res.json({ version: 0, updates: [] })
+    }
+    const data = JSON.parse(fs.readFileSync(NOTIFICATIONS_FILE, 'utf-8'))
+    res.json(data)
+  } catch (error) {
+    console.error('❌ [NOTIFICATIONS] Error reading notifications:', error)
+    res.status(500).json({ error: 'Failed to read notifications' })
+  }
+})
+
+// Add notification (admin only)
+app.post('/api/notifications', authMiddleware, (req, res) => {
+  try {
+    const { type, category, message } = req.body
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' })
+    }
+    
+    let data = { version: 0, updates: [] }
+    if (fs.existsSync(NOTIFICATIONS_FILE)) {
+      data = JSON.parse(fs.readFileSync(NOTIFICATIONS_FILE, 'utf-8'))
+    }
+    
+    // Increment version and add new notification
+    data.version += 1
+    const newNotification = {
+      id: data.version,
+      timestamp: new Date().toISOString(),
+      type: type || 'update',
+      category: category || 'lora',
+      message
+    }
+    
+    // Add to beginning of array (newest first)
+    data.updates.unshift(newNotification)
+    
+    // Keep only last 50 notifications
+    if (data.updates.length > 50) {
+      data.updates = data.updates.slice(0, 50)
+    }
+    
+    fs.writeFileSync(NOTIFICATIONS_FILE, JSON.stringify(data, null, 2))
+    
+    console.log(`📢 [NOTIFICATIONS] Added: ${message}`)
+    res.json({ success: true, notification: newNotification, version: data.version })
+  } catch (error) {
+    console.error('❌ [NOTIFICATIONS] Error adding notification:', error)
+    res.status(500).json({ error: 'Failed to add notification' })
+  }
+})
+
 // API route - get metadata with last modified timestamps
 app.get('/api/metadata', (req, res) => {
   try {
@@ -2428,6 +2904,25 @@ app.get('/api/requests', (req, res) => {
   try {
     ensureRequestDir()
 
+    // Check if request is from admin or Discord user
+    let isAdmin = false
+    let discordUserId = null
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1]
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+        if (decoded.role === 'admin') {
+          isAdmin = true
+        } else if (decoded.discordId) {
+          // Discord user
+          discordUserId = decoded.discordId
+        }
+      } catch (error) {
+        // Invalid token
+      }
+    }
+
     const folders = fs.readdirSync(REQUEST_FOLDER_PATH).filter(file => {
       const fullPath = path.join(REQUEST_FOLDER_PATH, file)
       return fs.statSync(fullPath).isDirectory()
@@ -2460,6 +2955,18 @@ app.get('/api/requests', (req, res) => {
         }
       }
 
+      // Handle submittedBy visibility
+      if (meta.submittedBy) {
+        if (isAdmin) {
+          // Admin sees full submittedBy info
+        } else if (discordUserId && meta.submittedBy.discordId === discordUserId) {
+          // Discord user sees their own submittedBy info (to enable edit button)
+        } else {
+          // Others don't see submittedBy
+          delete meta.submittedBy
+        }
+      }
+
       return meta
     })
 
@@ -2473,9 +2980,33 @@ app.get('/api/requests', (req, res) => {
   }
 })
 
-// Create new request
+// Create new request (requires Discord authentication)
 app.post('/api/requests', (req, res) => {
   try {
+    // Verify Discord token if Discord OAuth is configured
+    let submittedBy = null
+    const authHeader = req.headers.authorization
+    
+    if (DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET) {
+      // Discord OAuth is configured, require authentication
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Discord authentication required' })
+      }
+
+      const token = authHeader.split(' ')[1]
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+        submittedBy = {
+          discordId: decoded.discordId,
+          username: decoded.username,
+          globalName: decoded.globalName,
+          avatar: decoded.avatar
+        }
+      } catch (error) {
+        return res.status(401).json({ error: 'Invalid Discord token' })
+      }
+    }
+
     ensureRequestDir()
 
     const id = Date.now().toString()
@@ -2510,7 +3041,8 @@ app.post('/api/requests', (req, res) => {
       ...req.body,
       status: req.body.status || 'pending',
       createdAt: new Date().toISOString(),
-      order: maxOrder + 1
+      order: maxOrder + 1,
+      submittedBy // Discord user info (null if OAuth not configured)
     }
 
     // Write meta.json
@@ -2521,7 +3053,10 @@ app.post('/api/requests', (req, res) => {
     // Send webhook notification for new request
     sendWebhookNotification('new_request', newRequest)
 
-    res.status(201).json(newRequest)
+    // Return request without submittedBy for non-admin response
+    const publicRequest = { ...newRequest }
+    delete publicRequest.submittedBy
+    res.status(201).json(publicRequest)
   } catch (error) {
     console.error('Error creating request:', error)
     res.status(500).json({ error: 'Failed to create request' })
@@ -2532,7 +3067,7 @@ app.post('/api/requests', (req, res) => {
 app.put('/api/requests/:id/status', verifyToken, (req, res) => {
   try {
     const { id } = req.params
-    const { status } = req.body
+    const { status, rejectReason } = req.body
     const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
 
     if (!fs.existsSync(metaPath)) {
@@ -2543,6 +3078,14 @@ app.put('/api/requests/:id/status', verifyToken, (req, res) => {
     meta.status = status
     meta.updatedAt = new Date().toISOString()
 
+    // Handle reject reason
+    if (status === 'rejected' && rejectReason !== undefined) {
+      meta.rejectReason = rejectReason
+    } else if (status !== 'rejected') {
+      // Clear reject reason if status is no longer rejected
+      delete meta.rejectReason
+    }
+
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 
 
@@ -2550,6 +3093,68 @@ app.put('/api/requests/:id/status', verifyToken, (req, res) => {
   } catch (error) {
     console.error('Error updating request status:', error)
     res.status(500).json({ error: 'Failed to update request status' })
+  }
+})
+
+// Update request by owner (Discord user editing their own request)
+app.put('/api/requests/:id/owner', (req, res) => {
+  try {
+    const { id } = req.params
+    const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
+
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).json({ error: 'Request not found' })
+    }
+
+    // Verify Discord token
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Discord authentication required' })
+    }
+
+    const token = authHeader.split(' ')[1]
+    let discordUser
+    try {
+      discordUser = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid Discord token' })
+    }
+
+    // Read existing request
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+
+    // Verify ownership
+    if (!meta.submittedBy || meta.submittedBy.discordId !== discordUser.discordId) {
+      return res.status(403).json({ error: 'You can only edit your own requests' })
+    }
+
+    // Only allow editing pending requests
+    if (meta.status !== 'pending') {
+      return res.status(403).json({ error: 'Can only edit pending requests' })
+    }
+
+    // Update allowed fields only
+    const { type, characterName, outfit, livestreamArchive, channelLink, socialMediaLink } = req.body
+
+    if (type !== undefined) meta.type = type
+    if (characterName !== undefined) meta.characterName = characterName
+    if (outfit !== undefined) meta.outfit = outfit
+    if (livestreamArchive !== undefined) meta.livestreamArchive = livestreamArchive
+    if (channelLink !== undefined) meta.channelLink = channelLink
+    if (socialMediaLink !== undefined) meta.socialMediaLink = socialMediaLink
+
+    meta.updatedAt = new Date().toISOString()
+
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+
+    // Return request without full submittedBy for response
+    const publicMeta = { ...meta }
+    delete publicMeta.submittedBy
+
+    res.json(publicMeta)
+  } catch (error) {
+    console.error('Error updating request by owner:', error)
+    res.status(500).json({ error: 'Failed to update request' })
   }
 })
 
@@ -2942,6 +3547,122 @@ app.get('/api/workflows/:id/download/:filename', (req, res) => {
     console.error('Error downloading file:', error)
     res.status(500).json({ error: 'Failed to download file' })
   }
+})
+
+// =====================
+// Discord OAuth2 Routes
+// =====================
+
+// Generate Discord OAuth2 authorization URL
+app.get('/api/auth/discord', (req, res) => {
+  if (!DISCORD_CLIENT_ID) {
+    return res.status(500).json({ error: 'Discord OAuth not configured' })
+  }
+
+  const params = new URLSearchParams({
+    client_id: DISCORD_CLIENT_ID,
+    redirect_uri: DISCORD_REDIRECT_URI,
+    response_type: 'code',
+    scope: 'identify'
+  })
+
+  const authUrl = `https://discord.com/api/oauth2/authorize?${params.toString()}`
+  res.json({ authUrl })
+})
+
+// Discord OAuth2 callback
+app.get('/api/auth/discord/callback', async (req, res) => {
+  const { code } = req.query
+
+  if (!code) {
+    return res.redirect('/?error=no_code')
+  }
+
+  try {
+    // Exchange code for access token
+    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        client_id: DISCORD_CLIENT_ID,
+        client_secret: DISCORD_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: DISCORD_REDIRECT_URI
+      })
+    })
+
+    if (!tokenResponse.ok) {
+      console.error('Discord token error:', await tokenResponse.text())
+      return res.redirect('/?error=token_failed')
+    }
+
+    const tokenData = await tokenResponse.json()
+
+    // Get user info
+    const userResponse = await fetch('https://discord.com/api/users/@me', {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`
+      }
+    })
+
+    if (!userResponse.ok) {
+      console.error('Discord user info error:', await userResponse.text())
+      return res.redirect('/?error=user_info_failed')
+    }
+
+    const userData = await userResponse.json()
+
+    // Create a JWT token with Discord user info
+    const discordToken = jwt.sign(
+      {
+        discordId: userData.id,
+        username: userData.username,
+        globalName: userData.global_name || userData.username,
+        avatar: userData.avatar
+      },
+      process.env.JWT_SECRET || 'default-secret-key',
+      { expiresIn: '30d' }
+    )
+
+    // Redirect back to the app with the token
+    res.redirect(`/?discord_token=${discordToken}`)
+  } catch (error) {
+    console.error('Discord OAuth error:', error)
+    res.redirect('/?error=oauth_failed')
+  }
+})
+
+// Verify Discord token and get user info
+app.get('/api/auth/discord/me', (req, res) => {
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' })
+  }
+
+  const token = authHeader.split(' ')[1]
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key')
+    res.json({
+      discordId: decoded.discordId,
+      username: decoded.username,
+      globalName: decoded.globalName,
+      avatar: decoded.avatar
+    })
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' })
+  }
+})
+
+// Check if Discord OAuth is configured
+app.get('/api/auth/discord/status', (req, res) => {
+  res.json({
+    configured: !!(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET),
+    required: true // Set to true to require Discord login for requests
+  })
 })
 
 // Serve index.html for all other routes in production (SPA support)

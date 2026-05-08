@@ -318,6 +318,14 @@
   border-color: rgba(74, 222, 128, 0.35);
 }
 
+.request-card.rejected {
+  border-color: rgba(224, 122, 95, 0.2);
+}
+
+.request-card.rejected:hover {
+  border-color: rgba(224, 122, 95, 0.35);
+}
+
 /* Compact view */
 .request-card-compact {
   padding: 0.75rem;
@@ -811,5 +819,560 @@
   .request-admin-controls {
     width: 100%;
     justify-content: flex-start;
+  }
+}
+
+/* ============================================
+   Discord OAuth Styles
+   ============================================ */
+.discord-auth-section {
+  display: flex;
+  align-items: center;
+}
+
+.discord-login-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: #5865F2;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.discord-login-btn:hover {
+  background: #4752c4;
+  transform: translateY(-1px);
+}
+
+.discord-icon {
+  flex-shrink: 0;
+}
+
+.discord-user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
+}
+
+.discord-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.discord-avatar-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #5865F2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.discord-username {
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discord-logout-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.discord-logout-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+/* ============================================
+   Submitter Info Link (Admin Only)
+   ============================================ */
+.request-card-submitter-link {
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--bg-hover);
+}
+
+.view-submitter-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  background: rgba(88, 101, 242, 0.15);
+  border: 1px solid rgba(88, 101, 242, 0.3);
+  border-radius: 6px;
+  color: #7289da;
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-submitter-btn:hover {
+  background: rgba(88, 101, 242, 0.25);
+  border-color: rgba(88, 101, 242, 0.5);
+  color: #99aab5;
+}
+
+.view-submitter-btn svg {
+  flex-shrink: 0;
+}
+
+/* ============================================
+   Submitter Info Modal
+   ============================================ */
+.submitter-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: fadeIn 0.2s ease;
+}
+
+.submitter-modal-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 360px;
+  width: 90%;
+  position: relative;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.2s ease;
+}
+
+.submitter-modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.submitter-modal-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.submitter-modal-content h3 {
+  margin: 0 0 1.25rem 0;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.submitter-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.submitter-modal-avatar img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #5865F2;
+}
+
+.submitter-modal-avatar-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #5865F2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 2rem;
+  font-weight: 600;
+  border: 3px solid #4752c4;
+}
+
+.submitter-modal-details {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.submitter-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.submitter-detail-label {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.submitter-detail-value {
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.submitter-id-mono {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* ============================================
+   Owner Edit Button
+   ============================================ */
+.owner-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(88, 101, 242, 0.15);
+  border: 1px solid rgba(88, 101, 242, 0.3);
+  border-radius: 6px;
+  color: #7289da;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.owner-edit-btn:hover {
+  background: rgba(88, 101, 242, 0.25);
+  border-color: rgba(88, 101, 242, 0.5);
+  color: #99aab5;
+}
+
+/* ============================================
+   Reject Reason Styles
+   ============================================ */
+.reject-reason-field {
+  background: rgba(224, 122, 95, 0.1);
+  border: 1px solid rgba(224, 122, 95, 0.2);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.reject-reason-text {
+  color: var(--chart-costume);
+  font-style: italic;
+}
+
+.reject-reason-button {
+  background: rgba(224, 122, 95, 0.15) !important;
+  border-color: rgba(224, 122, 95, 0.3) !important;
+}
+
+.reject-reason-button:hover:not(:disabled) {
+  background: rgba(224, 122, 95, 0.25) !important;
+  border-color: rgba(224, 122, 95, 0.5) !important;
+}
+
+/* Reject Reason Modal */
+.reject-reason-modal {
+  max-width: 420px;
+}
+
+.reject-reason-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.reject-reason-info {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.reject-reason-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color 0.2s ease;
+}
+
+.reject-reason-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.reject-reason-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.reject-reason-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.reject-reason-actions .cancel-button,
+.reject-reason-actions .submit-button {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+/* ============================================
+   Request Detail Modal
+   ============================================ */
+.request-detail-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 500px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease;
+}
+
+.detail-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-right: 2rem; /* Space for close button */
+}
+
+.request-status-badge.large {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.detail-modal-date {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.detail-modal-main {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.detail-modal-main h2 {
+  margin: 0 0 0.3rem 0;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.detail-modal-outfit {
+  margin: 0;
+  color: var(--accent-secondary);
+  font-size: 1rem;
+}
+
+.detail-modal-reject-reason {
+  background: rgba(224, 122, 95, 0.1);
+  border: 1px solid rgba(224, 122, 95, 0.25);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.detail-modal-reject-reason strong {
+  color: var(--chart-costume);
+  font-size: 0.85rem;
+}
+
+.detail-modal-reject-reason p {
+  margin: 0.4rem 0 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.detail-modal-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.detail-link-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.detail-link-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.detail-link-label svg {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.detail-link-item a {
+  color: var(--accent-primary);
+  font-size: 0.9rem;
+  text-decoration: none;
+  word-break: break-all;
+  transition: color 0.2s ease;
+}
+
+.detail-link-item a:hover {
+  color: var(--accent-secondary);
+  text-decoration: underline;
+}
+
+.detail-link-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* Submitter info in detail modal (admin only) */
+.detail-modal-submitter {
+  background: rgba(88, 101, 242, 0.08);
+  border: 1px solid rgba(88, 101, 242, 0.2);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.detail-submitter-header {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.6rem;
+}
+
+.detail-submitter-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.detail-submitter-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(88, 101, 242, 0.4);
+}
+
+.detail-submitter-avatar-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #5865F2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.detail-submitter-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.detail-submitter-name {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.detail-submitter-id {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+/* Modal edit button */
+.modal-edit-btn {
+  width: 100%;
+  margin-top: 0;
+}
+
+/* Mobile adjustments for Discord */
+@media (max-width: 768px) {
+  .discord-auth-section {
+    width: 100%;
+  }
+
+  .discord-login-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .discord-user-info {
+    width: 100%;
+    justify-content: center;
   }
 }
