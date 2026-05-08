@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-05-09",
+    "changes": [
+      {
+        "hash": "ad3796c",
+        "type": "build",
+        "message": "Fix Docker image build (npm peer-deps, recharts react-is)",
+        "hidden": true
+      }
+    ]
+  },
+  {
     "date": "2026-05-08",
     "changes": [
       {
