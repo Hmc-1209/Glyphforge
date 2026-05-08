@@ -11,6 +11,7 @@ import dotenv from 'dotenv'
 import ffmpeg from 'fluent-ffmpeg'
 import sharp from 'sharp'
 import http from 'http'
+import rateLimit from 'express-rate-limit'
 
 dotenv.config()
 
@@ -210,6 +211,44 @@ async function withFileLock(filePath, fn) {
     }
   }
 }
+
+// ============================================
+// RATE LIMITING
+// ============================================
+// Three buckets:
+//   loginLimiter   — strict, applied to admin login + Discord OAuth callback.
+//                    5 attempts / 15 min per IP, no retry-skip on success
+//                    (keeps brute-force attempts from cycling through users).
+//   submitLimiter  — public mutation: new requests + admin-mode toggles. 30
+//                    requests / 5 min per IP. Authenticated callers count
+//                    too — admin should not be issuing 30 writes per 5 min.
+//   counterLimiter — view/copy/download counters. 60 increments / minute /
+//                    IP. Stops drive-by inflation while still allowing
+//                    legitimate browsing.
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Try again later.' },
+})
+const submitLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Slow down and try again shortly.' },
+})
+const counterLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Don't block on hit, just don't increment — saves the user a 429 popup
+  // for a non-critical write. We still emit the standard headers.
+  handler: (req, res) => res.status(429).json({ error: 'Slow down' }),
+})
 
 // Webhook configuration
 const WEBHOOK_ENABLED = process.env.WEBHOOK_ENABLED === 'true'
@@ -767,7 +806,7 @@ app.get('/api/loras', async (req, res) => {
 })
 
 // API route - increment prompt copy count
-app.post('/api/prompts/:id/copy', (req, res) => {
+app.post('/api/prompts/:id/copy', counterLimiter, (req, res) => {
   try {
     const { id } = req.params
     const metaPath = path.join(PROMPT_FOLDER_PATH, id, 'meta.json')
@@ -787,7 +826,7 @@ app.post('/api/prompts/:id/copy', (req, res) => {
 })
 
 // API route - increment costume copy count
-app.post('/api/costumes/:id/copy', (req, res) => {
+app.post('/api/costumes/:id/copy', counterLimiter, (req, res) => {
   if (!COSTUME_FOLDER_PATH) {
     return res.status(404).json({ error: 'Costume folder not configured' })
   }
@@ -1015,7 +1054,7 @@ app.post('/api/costumes/:id/image/:imageIndex', authMiddleware, costumeUpload.si
 })
 
 // API route - increment LoRA copy count
-app.post('/api/loras/:id/copy', (req, res) => {
+app.post('/api/loras/:id/copy', counterLimiter, (req, res) => {
   try {
     const { id } = req.params
     const metaPath = path.join(LORA_FOLDER_PATH, 'character', id, 'meta.json')
@@ -1035,7 +1074,7 @@ app.post('/api/loras/:id/copy', (req, res) => {
 })
 
 // API route - increment LoRA download count
-app.post('/api/loras/:id/download', (req, res) => {
+app.post('/api/loras/:id/download', counterLimiter, (req, res) => {
   try {
     const { id } = req.params
     const metaPath = path.join(LORA_FOLDER_PATH, 'character', id, 'meta.json')
@@ -1194,7 +1233,7 @@ app.get('/api/fn-loras', async (req, res) => {
 })
 
 // API route - increment Fn LoRA copy count
-app.post('/api/fn-loras/:id/copy', (req, res) => {
+app.post('/api/fn-loras/:id/copy', counterLimiter, (req, res) => {
   try {
     const { id } = req.params
     const metaPath = path.join(LORA_FOLDER_PATH, 'functional', id, 'meta.json')
@@ -1214,7 +1253,7 @@ app.post('/api/fn-loras/:id/copy', (req, res) => {
 })
 
 // API route - increment Fn LoRA download count
-app.post('/api/fn-loras/:id/download', (req, res) => {
+app.post('/api/fn-loras/:id/download', counterLimiter, (req, res) => {
   try {
     const { id } = req.params
     const metaPath = path.join(LORA_FOLDER_PATH, 'functional', id, 'meta.json')
@@ -2057,7 +2096,7 @@ function authMiddleware(req, res, next) {
 const verifyToken = authMiddleware
 
 // Admin login endpoint
-app.post('/api/gallery/admin/login', async (req, res) => {
+app.post('/api/gallery/admin/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body
 
@@ -3139,7 +3178,7 @@ app.get('/api/requests', (req, res) => {
 })
 
 // Create new request (requires Discord authentication)
-app.post('/api/requests', (req, res) => {
+app.post('/api/requests', submitLimiter, (req, res) => {
   try {
     // Verify Discord token if Discord OAuth is configured
     let submittedBy = null

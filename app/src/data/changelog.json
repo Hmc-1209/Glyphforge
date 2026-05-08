@@ -42,6 +42,11 @@
         "hash": "6988700",
         "type": "fix",
         "message": "Counters and metadata writes are now crash-safe (atomic) and no longer lose increments under load"
+      },
+      {
+        "hash": "2897719",
+        "type": "security",
+        "message": "Rate limiting added to login, request submission, and view/copy counters"
       }
     ]
   },
