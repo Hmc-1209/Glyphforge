@@ -37,6 +37,11 @@
         "hash": "638a854",
         "type": "security",
         "message": "Hardened request submission API against client-controlled status / ownership tampering"
+      },
+      {
+        "hash": "6988700",
+        "type": "fix",
+        "message": "Counters and metadata writes are now crash-safe (atomic) and no longer lose increments under load"
       }
     ]
   },

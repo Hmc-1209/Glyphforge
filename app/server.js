@@ -167,6 +167,50 @@ function validatePathParams(slugParams = [], { requireType = true } = {}) {
   }
 }
 
+// ============================================
+// ATOMIC JSON WRITES + PER-FILE MUTEX
+// ============================================
+// Many endpoints do read-modify-write on small JSON files (meta.json,
+// notifications.json, etc.). Two pitfalls:
+//   1. Plain fs.writeFileSync truncates first then writes; an interrupted
+//      write (process killed, ENOSPC) leaves the file empty or partially
+//      written, corrupting the data.
+//   2. Two concurrent requests can both read the old value, increment
+//      independently, then both write — the second write loses one update.
+//
+// writeJsonAtomic() writes to a sibling tmp file then renames atomically,
+// so a reader either sees the old or the new file, never a torn one.
+// withFileLock() serializes async work that touches a given path within
+// this Node process. Single-container deployment is assumed.
+
+function writeJsonAtomic(filePath, data) {
+  const dir = path.dirname(filePath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  const tmp = `${filePath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`
+  const json = JSON.stringify(data, null, 2)
+  fs.writeFileSync(tmp, json)
+  fs.renameSync(tmp, filePath)
+}
+
+const __fileLocks = new Map()
+async function withFileLock(filePath, fn) {
+  const key = path.resolve(filePath)
+  const prev = __fileLocks.get(key) || Promise.resolve()
+  let release
+  const next = new Promise((resolve) => { release = resolve })
+  const chained = prev.then(() => next)
+  __fileLocks.set(key, chained)
+  await prev
+  try {
+    return await fn()
+  } finally {
+    release()
+    if (__fileLocks.get(key) === chained) {
+      __fileLocks.delete(key)
+    }
+  }
+}
+
 // Webhook configuration
 const WEBHOOK_ENABLED = process.env.WEBHOOK_ENABLED === 'true'
 const WEBHOOK_URL = process.env.WEBHOOK_URL
@@ -526,7 +570,7 @@ app.get('/api/costumes', async (req, res) => {
     
     // Save metadata if changed
     if (metadataChanged) {
-      fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2))
+      fs.writeFileSync(metadataPath, metadata)
     }
 
     res.json({ costumes, metadata })
@@ -562,7 +606,7 @@ app.put('/api/costumes/metadata', authMiddleware, (req, res) => {
       metadata.costumeOrder = { ...metadata.costumeOrder, ...costumeOrder }
     }
     
-    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2))
+    writeJsonAtomic(metadataPath, metadata)
 
 
     res.json({ success: true, metadata })
@@ -731,7 +775,7 @@ app.post('/api/prompts/:id/copy', (req, res) => {
     if (fs.existsSync(metaPath)) {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
       meta.copyCount = (meta.copyCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
       res.json({ success: true, copyCount: meta.copyCount })
     } else {
       res.status(404).json({ error: 'Meta file not found' })
@@ -755,7 +799,7 @@ app.post('/api/costumes/:id/copy', (req, res) => {
     if (fs.existsSync(metaPath)) {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
       meta.copyCount = (meta.copyCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
       res.json({ success: true, copyCount: meta.copyCount })
     } else {
       res.status(404).json({ error: 'Meta file not found' })
@@ -789,7 +833,7 @@ app.post('/api/costumes', authMiddleware, (req, res) => {
     fs.mkdirSync(newFolderPath, { recursive: true })
 
     // Create prompt.txt (scene prompt)
-    fs.writeFileSync(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
+    writeJsonAtomic(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
 
     // Create meta.json
     const meta = {
@@ -805,7 +849,7 @@ app.post('/api/costumes', authMiddleware, (req, res) => {
       author: author || 'dANNY',
       copyCount: 0
     }
-    fs.writeFileSync(path.join(newFolderPath, 'meta.json'), JSON.stringify(meta, null, 2))
+    fs.writeFileSync(path.join(newFolderPath, 'meta.json'), meta)
 
 
     res.json({
@@ -838,7 +882,7 @@ app.put('/api/costumes/:id', authMiddleware, (req, res) => {
 
     // Update prompt.txt (scene prompt)
     if (prompt !== undefined) {
-      fs.writeFileSync(promptPath, prompt, 'utf-8')
+      writeJsonAtomic(promptPath, prompt, 'utf-8')
     }
 
     // Update meta.json
@@ -859,7 +903,7 @@ app.put('/api/costumes/:id', authMiddleware, (req, res) => {
     if (stability !== undefined) meta.stability = stability
     if (author !== undefined) meta.author = author
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    fs.writeFileSync(metaPath, meta)
 
 
     res.json({ success: true, message: 'Costume updated successfully' })
@@ -979,7 +1023,7 @@ app.post('/api/loras/:id/copy', (req, res) => {
     if (fs.existsSync(metaPath)) {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
       meta.copyCount = (meta.copyCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
       res.json({ success: true, copyCount: meta.copyCount })
     } else {
       res.status(404).json({ error: 'Meta file not found' })
@@ -999,7 +1043,7 @@ app.post('/api/loras/:id/download', (req, res) => {
     if (fs.existsSync(metaPath)) {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
       meta.downloadCount = (meta.downloadCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
       res.json({ success: true, downloadCount: meta.downloadCount })
     } else {
       res.status(404).json({ error: 'Meta file not found' })
@@ -1158,7 +1202,7 @@ app.post('/api/fn-loras/:id/copy', (req, res) => {
     if (fs.existsSync(metaPath)) {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
       meta.copyCount = (meta.copyCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
       res.json({ success: true, copyCount: meta.copyCount })
     } else {
       res.status(404).json({ error: 'Meta file not found' })
@@ -1178,7 +1222,7 @@ app.post('/api/fn-loras/:id/download', (req, res) => {
     if (fs.existsSync(metaPath)) {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
       meta.downloadCount = (meta.downloadCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
       res.json({ success: true, downloadCount: meta.downloadCount })
     } else {
       res.status(404).json({ error: 'Meta file not found' })
@@ -1318,7 +1362,7 @@ app.post('/api/fn-loras', authMiddleware, (req, res) => {
       copyCount: 0
     }
 
-    fs.writeFileSync(path.join(fnLoraPath, 'meta.json'), JSON.stringify(meta, null, 2))
+    writeJsonAtomic(path.join(fnLoraPath, 'meta.json'), meta)
 
     res.json({ 
       success: true, 
@@ -1358,7 +1402,7 @@ app.put('/api/fn-loras/:id', authMiddleware, (req, res) => {
     if (sensitive !== undefined) meta.sensitive = sensitive
     if (weight !== undefined) meta.weight = weight !== null ? parseFloat(weight) : null
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
     res.json({ success: true, meta })
   } catch (error) {
@@ -1616,7 +1660,7 @@ app.post('/api/loras', authMiddleware, (req, res) => {
       copyCount: 0
     }
 
-    fs.writeFileSync(path.join(loraPath, 'meta.json'), JSON.stringify(meta, null, 2))
+    writeJsonAtomic(path.join(loraPath, 'meta.json'), meta)
 
 
     res.json({ 
@@ -1658,7 +1702,7 @@ app.put('/api/loras/:id', authMiddleware, (req, res) => {
     if (link !== undefined) meta.link = link
     if (prompt !== undefined) meta.prompt = prompt
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json({ success: true, meta })
@@ -2064,7 +2108,7 @@ app.post('/api/prompts', authMiddleware, (req, res) => {
     fs.mkdirSync(newFolderPath, { recursive: true })
 
     // Create prompt.txt
-    fs.writeFileSync(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
+    writeJsonAtomic(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
 
     // Create negative.txt if provided
     if (negativePrompt && negativePrompt.trim()) {
@@ -2085,7 +2129,7 @@ app.post('/api/prompts', authMiddleware, (req, res) => {
       copyCount: 0,
       usedFnLoras: usedFnLoras || []
     }
-    fs.writeFileSync(path.join(newFolderPath, 'meta.json'), JSON.stringify(meta, null, 2))
+    fs.writeFileSync(path.join(newFolderPath, 'meta.json'), meta)
 
 
     // Create placeholder images (1.png will be required to upload)
@@ -2155,7 +2199,7 @@ app.put('/api/prompts/:id', authMiddleware, (req, res) => {
 
     // Update prompt.txt
     if (prompt !== undefined) {
-      fs.writeFileSync(promptPath, prompt, 'utf-8')
+      writeJsonAtomic(promptPath, prompt, 'utf-8')
     }
 
     // Update negative.txt
@@ -2186,7 +2230,7 @@ app.put('/api/prompts/:id', authMiddleware, (req, res) => {
     if (author !== undefined) meta.author = author
     if (usedFnLoras !== undefined) meta.usedFnLoras = usedFnLoras
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    fs.writeFileSync(metaPath, meta)
 
 
     res.json({ success: true, message: 'Prompt updated successfully' })
@@ -2585,7 +2629,7 @@ app.post('/api/gallery/:type/:id/view', async (req, res) => {
     if (fs.existsSync(metaPath)) {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
       meta.viewCount = (meta.viewCount || 0) + 1
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
       res.json({ success: true, viewCount: meta.viewCount })
     } else {
       res.status(404).json({ error: 'Meta file not found' })
@@ -2639,7 +2683,7 @@ app.post('/api/gallery/admin/:type/create', validatePathParams(), authMiddleware
     }
 
     // Create meta.json
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json({ success: true, id })
@@ -2688,7 +2732,7 @@ app.put('/api/gallery/admin/:type/reorder-albums', validatePathParams(), authMid
       if (fs.existsSync(metaPath)) {
         const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
         meta.order = albumUpdate.order
-        fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+        writeJsonAtomic(metaPath, meta)
         updatedCount++
       } else {
         notFoundAlbums.push(albumUpdate.id)
@@ -2721,7 +2765,7 @@ app.put('/api/gallery/admin/:type/:id', validatePathParams(['id']), authMiddlewa
       return res.status(404).json({ error: 'Album not found' })
     }
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json({ success: true })
@@ -2789,7 +2833,7 @@ app.delete('/api/gallery/admin/:type/:id/image', validatePathParams(['id']), aut
     }
 
     // Update meta.json
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json({ success: true, images: meta.images })
@@ -2840,7 +2884,7 @@ app.put('/api/gallery/admin/:type/:id/reorder', validatePathParams(['id']), auth
     meta.images = newImageOrder
 
     // Update meta.json
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
 
     console.log('✅ [REORDER] Successfully saved new order')
@@ -2904,7 +2948,7 @@ app.post('/api/notifications', authMiddleware, (req, res) => {
       data.updates = data.updates.slice(0, 50)
     }
     
-    fs.writeFileSync(NOTIFICATIONS_FILE, JSON.stringify(data, null, 2))
+    writeJsonAtomic(NOTIFICATIONS_FILE, data)
     
     console.log(`📢 [NOTIFICATIONS] Added: ${message}`)
     res.json({ success: true, notification: newNotification, version: data.version })
@@ -3175,7 +3219,7 @@ app.post('/api/requests', (req, res) => {
 
     // Write meta.json
     const metaPath = path.join(requestPath, 'meta.json')
-    fs.writeFileSync(metaPath, JSON.stringify(newRequest, null, 2))
+    writeJsonAtomic(metaPath, newRequest)
 
 
     // Send webhook notification for new request
@@ -3209,7 +3253,7 @@ app.put('/api/requests/reorder', verifyToken, (req, res) => {
         try {
           const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
           meta.order = index
-          fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+          writeJsonAtomic(metaPath, meta)
         } catch (error) {
           console.error(`Error updating order for request ${id}:`, error)
         }
@@ -3259,7 +3303,7 @@ app.put('/api/requests/:id/status', verifyToken, (req, res) => {
       delete meta.rejectReason
     }
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json(meta)
@@ -3318,7 +3362,7 @@ app.put('/api/requests/:id/owner', (req, res) => {
 
     meta.updatedAt = new Date().toISOString()
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
     // Return request without full submittedBy for response
     const publicMeta = { ...meta }
@@ -3370,7 +3414,7 @@ app.put('/api/requests/:id', verifyToken, (req, res) => {
       updatedAt: new Date().toISOString()
     }
 
-    fs.writeFileSync(metaPath, JSON.stringify(updatedMeta, null, 2))
+    writeJsonAtomic(metaPath, updatedMeta)
 
 
     res.json(updatedMeta)
@@ -3513,7 +3557,7 @@ app.post('/api/workflows', authMiddleware, (req, res) => {
       order: 0
     }
 
-    fs.writeFileSync(path.join(workflowPath, 'meta.json'), JSON.stringify(meta, null, 2))
+    writeJsonAtomic(path.join(workflowPath, 'meta.json'), meta)
 
 
     res.json(meta)
@@ -3545,7 +3589,7 @@ app.put('/api/workflows/:id', authMiddleware, (req, res) => {
     if (req.body.workflowFile !== undefined) meta.workflowFile = req.body.workflowFile
     if (req.body.attachments !== undefined) meta.attachments = req.body.attachments
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json(meta)
@@ -3596,7 +3640,7 @@ app.put('/api/workflows/reorder', authMiddleware, (req, res) => {
         meta.order = index
       }
 
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
       return meta
     }).filter(Boolean)
 
@@ -3648,7 +3692,7 @@ app.post('/api/workflows/:id/upload', authMiddleware, workflowUpload.single('fil
       }
     }
 
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json({ success: true, filename, meta })
@@ -3681,7 +3725,7 @@ app.delete('/api/workflows/:id/file/:filename', authMiddleware, (req, res) => {
       if (meta.attachments) {
         meta.attachments = meta.attachments.filter(f => f !== filename)
       }
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+      writeJsonAtomic(metaPath, meta)
     }
 
 
