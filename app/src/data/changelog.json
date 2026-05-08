@@ -63,6 +63,12 @@
         "hash": "09b3bee",
         "type": "chore",
         "message": "Upgraded server dependencies to patch known security advisories"
+      },
+      {
+        "hash": "8228220",
+        "type": "build",
+        "message": "Added ESLint configuration so contributors can lint locally",
+        "hidden": true
       }
     ]
   },
