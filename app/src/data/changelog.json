@@ -75,6 +75,11 @@
         "type": "docs",
         "message": "Added contributor guide documenting commit and security conventions",
         "hidden": true
+      },
+      {
+        "hash": "050f4ab",
+        "type": "feat",
+        "message": "New Discord notifications when LoRA, Prompt, Costume, Fn-LoRA, Workflow, or Request is added"
       }
     ]
   },

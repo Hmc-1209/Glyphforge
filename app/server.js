@@ -260,6 +260,115 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET
 const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || 'http://localhost:3001/api/auth/discord/callback'
 
+// Discord channel webhook (separate from OAuth) — for posting "new content"
+// notifications to a Discord channel.  Treat the URL as a secret.
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || ''
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || ''   // e.g. https://glyphforge.example.com
+
+// Per-event-type Discord embed colors (hex int).  Keep distinct so the channel
+// is glanceable.
+const DISCORD_EVENT_STYLES = {
+  new_lora:      { color: 0xff6699, emoji: '🎀', label: 'LoRA' },
+  new_fn_lora:   { color: 0x9966ff, emoji: '⚙️', label: 'Functional LoRA' },
+  new_prompt:    { color: 0x66ccff, emoji: '✨', label: 'Prompt' },
+  new_costume:   { color: 0xffaa33, emoji: '👗', label: 'Costume' },
+  new_workflow:  { color: 0x33cc99, emoji: '🧩', label: 'Workflow' },
+  new_request:   { color: 0xffcc00, emoji: '📥', label: 'Request' },
+  test:          { color: 0x808080, emoji: '🧪', label: 'Test' },
+}
+
+// Build a Discord embed payload for a given event.  Returns the body to POST
+// to the webhook (`{ username, embeds: [...] }`).
+function buildDiscordEmbed(eventType, data) {
+  const style = DISCORD_EVENT_STYLES[eventType] || { color: 0x607d8b, emoji: '📦', label: eventType }
+  const fields = []
+  let title = `${style.emoji} New ${style.label}`
+  let description = ''
+  let url = PUBLIC_BASE_URL || undefined
+
+  if (eventType === 'new_lora') {
+    title = `${style.emoji} New LoRA: ${data.character || 'Untitled'}`
+    if (data.cloth) description = `**Outfit:** ${data.cloth}`
+    if (data.gender)   fields.push({ name: 'Gender', value: String(data.gender), inline: true })
+    if (data.company)  fields.push({ name: 'Company', value: String(data.company), inline: true })
+    if (data.group)    fields.push({ name: 'Group', value: String(data.group), inline: true })
+    if (Array.isArray(data.model) && data.model.length) {
+      fields.push({ name: 'Model', value: data.model.join(', '), inline: true })
+    }
+  } else if (eventType === 'new_fn_lora') {
+    title = `${style.emoji} New Functional LoRA: ${data.title || 'Untitled'}`
+    if (data['sub-title']) description = String(data['sub-title'])
+    if (data.type)       fields.push({ name: 'Type', value: String(data.type), inline: true })
+    if (data.sensitive)  fields.push({ name: 'Rating', value: String(data.sensitive), inline: true })
+    if (data.weight !== undefined && data.weight !== null) {
+      fields.push({ name: 'Weight', value: String(data.weight), inline: true })
+    }
+  } else if (eventType === 'new_prompt') {
+    title = `${style.emoji} New Prompt: ${data.title || `#${data.id ?? ''}`}`
+    if (data.author)     fields.push({ name: 'Author', value: String(data.author), inline: true })
+    if (data.type)       fields.push({ name: 'Type', value: String(data.type), inline: true })
+    if (data.sensitive)  fields.push({ name: 'Rating', value: String(data.sensitive), inline: true })
+    if (data.place && data.place !== 'Unknown') {
+      fields.push({ name: 'Place', value: String(data.place), inline: true })
+    }
+  } else if (eventType === 'new_costume') {
+    title = `${style.emoji} New Costume: ${data.title || `#${data.id ?? ''}`}`
+    if (data.costumePrompt) {
+      const trimmed = String(data.costumePrompt).slice(0, 300)
+      description = `\`\`\`${trimmed}${data.costumePrompt.length > 300 ? '…' : ''}\`\`\``
+    }
+    if (data.author)     fields.push({ name: 'Author', value: String(data.author), inline: true })
+    if (data.sensitive)  fields.push({ name: 'Rating', value: String(data.sensitive), inline: true })
+  } else if (eventType === 'new_workflow') {
+    title = `${style.emoji} New Workflow: ${data.name || 'Untitled'}`
+    if (data.description) description = String(data.description).slice(0, 500)
+  } else if (eventType === 'new_request') {
+    title = `${style.emoji} New Request`
+    description = `**${data.characterName || 'Unknown'}**${data.outfit ? ` — ${data.outfit}` : ''}`
+    if (data.notes) fields.push({ name: 'Notes', value: String(data.notes).slice(0, 500) })
+  } else if (eventType === 'test') {
+    title = `${style.emoji} Glyphforge webhook test`
+    description = 'If you see this, Discord notifications are wired up.'
+  }
+
+  const embed = {
+    title,
+    color: style.color,
+    timestamp: new Date().toISOString(),
+    footer: { text: 'Glyphforge' },
+  }
+  if (description) embed.description = description
+  if (fields.length) embed.fields = fields
+  if (url) embed.url = url
+
+  return {
+    username: 'Glyphforge',
+    embeds: [embed],
+  }
+}
+
+// Fire-and-forget Discord channel notification.  Errors are logged but never
+// thrown; never await this from inside a request handler that's about to
+// respond to the user.
+function sendDiscordNotification(eventType, data) {
+  if (!DISCORD_WEBHOOK_URL) return
+  const payload = buildDiscordEmbed(eventType, data || {})
+  fetch(DISCORD_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+    .then((resp) => {
+      if (!resp.ok) {
+        // Don't log the URL — it's a secret.
+        console.error(`[discord] webhook responded ${resp.status} for ${eventType}`)
+      }
+    })
+    .catch((err) => {
+      console.error(`[discord] webhook error for ${eventType}: ${err.message}`)
+    })
+}
+
 // Send webhook notification for new requests
 async function sendWebhookNotification(eventType, data) {
   if (!WEBHOOK_ENABLED || !WEBHOOK_URL) {
@@ -891,6 +1000,7 @@ app.post('/api/costumes', authMiddleware, (req, res) => {
     fs.writeFileSync(path.join(newFolderPath, 'meta.json'), meta)
 
 
+    sendDiscordNotification('new_costume', { ...meta, id: nextId.toString() })
     res.json({
       success: true,
       message: 'Costume created successfully',
@@ -1403,6 +1513,7 @@ app.post('/api/fn-loras', authMiddleware, (req, res) => {
 
     writeJsonAtomic(path.join(fnLoraPath, 'meta.json'), meta)
 
+    sendDiscordNotification('new_fn_lora', { ...meta, id: folderName })
     res.json({ 
       success: true, 
       id: folderName,
@@ -1702,6 +1813,7 @@ app.post('/api/loras', authMiddleware, (req, res) => {
     writeJsonAtomic(path.join(loraPath, 'meta.json'), meta)
 
 
+    sendDiscordNotification('new_lora', { ...meta, id: folderName })
     res.json({ 
       success: true, 
       id: folderName,
@@ -2172,6 +2284,7 @@ app.post('/api/prompts', authMiddleware, (req, res) => {
 
 
     // Create placeholder images (1.png will be required to upload)
+    sendDiscordNotification('new_prompt', { ...meta, id: nextId.toString() })
     res.json({
       success: true,
       message: 'Prompt created successfully',
@@ -3263,6 +3376,7 @@ app.post('/api/requests', submitLimiter, (req, res) => {
 
     // Send webhook notification for new request
     sendWebhookNotification('new_request', newRequest)
+    sendDiscordNotification('new_request', newRequest)
 
     // Return request without submittedBy for non-admin response
     const publicRequest = { ...newRequest }
@@ -3599,11 +3713,22 @@ app.post('/api/workflows', authMiddleware, (req, res) => {
     writeJsonAtomic(path.join(workflowPath, 'meta.json'), meta)
 
 
+    sendDiscordNotification('new_workflow', meta)
     res.json(meta)
   } catch (error) {
     console.error('Error creating workflow:', error)
     res.status(500).json({ error: 'Failed to create workflow' })
   }
+})
+
+// Admin-only: send a test Discord notification.  Returns 503 if the webhook
+// URL is not configured, so the admin UI / curl can tell.
+app.post('/api/admin/test-discord-webhook', authMiddleware, (req, res) => {
+  if (!DISCORD_WEBHOOK_URL) {
+    return res.status(503).json({ error: 'DISCORD_WEBHOOK_URL is not configured' })
+  }
+  sendDiscordNotification('test', { triggeredAt: new Date().toISOString() })
+  res.json({ success: true, message: 'Test notification dispatched (fire-and-forget — check the channel).' })
 })
 
 // Update workflow metadata
