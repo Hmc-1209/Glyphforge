@@ -47,6 +47,11 @@
         "hash": "2897719",
         "type": "security",
         "message": "Rate limiting added to login, request submission, and view/copy counters"
+      },
+      {
+        "hash": "b78bf6f",
+        "type": "fix",
+        "message": "Unknown API endpoints now return a proper 404 (instead of silently serving the SPA)"
       }
     ]
   },

@@ -3915,6 +3915,13 @@ app.get('/api/auth/discord/status', (req, res) => {
   })
 })
 
+// Unmatched /api/* routes must return JSON 404, not the SPA HTML.
+// This handler must run AFTER all real /api/* routes but BEFORE the
+// catch-all SPA route below.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' })
+})
+
 // Serve index.html for all other routes in production (SPA support)
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (_req, res) => {
