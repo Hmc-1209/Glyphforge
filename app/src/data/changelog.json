@@ -32,6 +32,11 @@
         "hash": "7a8eaac",
         "type": "security",
         "message": "Hardened upload/download endpoints against path-traversal attempts"
+      },
+      {
+        "hash": "638a854",
+        "type": "security",
+        "message": "Hardened request submission API against client-controlled status / ownership tampering"
       }
     ]
   },

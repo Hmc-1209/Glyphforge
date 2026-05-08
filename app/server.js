@@ -3150,10 +3150,24 @@ app.post('/api/requests', (req, res) => {
       }
     })
 
+    // Allowlist of fields a submitter can set on creation. Anything else
+    // (status, order, id, createdAt, submittedBy, etc.) is server-controlled.
+    const REQUEST_CREATE_FIELDS = [
+      'type', 'characterName', 'outfit',
+      'livestreamArchive', 'channelLink', 'socialMediaLink',
+      'fnLoraTitle', 'fnLoraSubTitle',
+      'usedFnLoras',
+      'note',
+    ]
+    const cleanBody = {}
+    for (const k of REQUEST_CREATE_FIELDS) {
+      if (req.body[k] !== undefined) cleanBody[k] = req.body[k]
+    }
+
     const newRequest = {
       id,
-      ...req.body,
-      status: req.body.status || 'pending',
+      ...cleanBody,
+      status: 'pending',
       createdAt: new Date().toISOString(),
       order: maxOrder + 1,
       submittedBy // Discord user info (null if OAuth not configured)
@@ -3321,6 +3335,7 @@ app.put('/api/requests/:id/owner', (req, res) => {
 app.put('/api/requests/:id', verifyToken, (req, res) => {
   try {
     const { id } = req.params
+    if (!requireSlug('id', id, res)) return
     const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
 
     if (!fs.existsSync(metaPath)) {
@@ -3329,13 +3344,29 @@ app.put('/api/requests/:id', verifyToken, (req, res) => {
 
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
 
-    // Update meta with new data, preserving id, createdAt, and order
+    // Allowlist of fields an admin may overwrite. Identity, ordering, and
+    // ownership fields are preserved server-side and cannot be replayed
+    // through the request body.
+    const REQUEST_ADMIN_FIELDS = [
+      'type', 'characterName', 'outfit',
+      'livestreamArchive', 'channelLink', 'socialMediaLink',
+      'fnLoraTitle', 'fnLoraSubTitle',
+      'usedFnLoras',
+      'note',
+      'status', 'rejectReason',
+    ]
+    const cleanBody = {}
+    for (const k of REQUEST_ADMIN_FIELDS) {
+      if (req.body[k] !== undefined) cleanBody[k] = req.body[k]
+    }
+
     const updatedMeta = {
       ...meta,
-      ...req.body,
+      ...cleanBody,
       id, // Preserve original ID
       createdAt: meta.createdAt, // Preserve creation date
       order: meta.order, // Preserve order
+      submittedBy: meta.submittedBy, // Preserve original submitter identity
       updatedAt: new Date().toISOString()
     }
 
