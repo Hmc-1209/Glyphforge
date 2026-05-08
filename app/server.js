@@ -3063,6 +3063,51 @@ app.post('/api/requests', (req, res) => {
   }
 })
 
+// Reorder requests (admin only)
+// IMPORTANT: must be registered BEFORE /api/requests/:id routes,
+// otherwise Express matches "reorder" as the :id parameter and returns 404.
+app.put('/api/requests/reorder', verifyToken, (req, res) => {
+  try {
+    const { orderedIds } = req.body
+
+    if (!Array.isArray(orderedIds)) {
+      return res.status(400).json({ error: 'orderedIds must be an array' })
+    }
+
+    // Update order field in each request's meta.json
+    orderedIds.forEach((id, index) => {
+      const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+          meta.order = index
+          fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+        } catch (error) {
+          console.error(`Error updating order for request ${id}:`, error)
+        }
+      }
+    })
+
+    // Return updated requests
+    const requests = orderedIds.map(id => {
+      const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
+      if (fs.existsSync(metaPath)) {
+        try {
+          return JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
+        } catch (error) {
+          return null
+        }
+      }
+      return null
+    }).filter(Boolean)
+
+    res.json(requests)
+  } catch (error) {
+    console.error('Error reordering requests:', error)
+    res.status(500).json({ error: 'Failed to reorder requests' })
+  }
+})
+
 // Update request status (admin only)
 app.put('/api/requests/:id/status', verifyToken, (req, res) => {
   try {
@@ -3208,49 +3253,6 @@ app.delete('/api/requests/:id', verifyToken, (req, res) => {
   } catch (error) {
     console.error('Error deleting request:', error)
     res.status(500).json({ error: 'Failed to delete request' })
-  }
-})
-
-// Reorder requests (admin only)
-app.put('/api/requests/reorder', verifyToken, (req, res) => {
-  try {
-    const { orderedIds } = req.body
-
-    if (!Array.isArray(orderedIds)) {
-      return res.status(400).json({ error: 'orderedIds must be an array' })
-    }
-
-    // Update order field in each request's meta.json
-    orderedIds.forEach((id, index) => {
-      const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
-      if (fs.existsSync(metaPath)) {
-        try {
-          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
-          meta.order = index
-          fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
-        } catch (error) {
-          console.error(`Error updating order for request ${id}:`, error)
-        }
-      }
-    })
-
-    // Return updated requests
-    const requests = orderedIds.map(id => {
-      const metaPath = path.join(REQUEST_FOLDER_PATH, id, 'meta.json')
-      if (fs.existsSync(metaPath)) {
-        try {
-          return JSON.parse(fs.readFileSync(metaPath, 'utf-8'))
-        } catch (error) {
-          return null
-        }
-      }
-      return null
-    }).filter(Boolean)
-
-    res.json(requests)
-  } catch (error) {
-    console.error('Error reordering requests:', error)
-    res.status(500).json({ error: 'Failed to reorder requests' })
   }
 })
 

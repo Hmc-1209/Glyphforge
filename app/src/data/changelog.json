@@ -12,6 +12,11 @@
         "hash": "6e22d39",
         "type": "feat",
         "message": "Discord login, Fn LoRA tab, notifications panel, and Request submitter identity"
+      },
+      {
+        "hash": "6c3e136",
+        "type": "fix",
+        "message": "Request reorder now persists correctly (drag-and-drop in admin view)"
       }
     ]
   },
