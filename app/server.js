@@ -193,6 +193,17 @@ function writeJsonAtomic(filePath, data) {
   fs.renameSync(tmp, filePath)
 }
 
+// Atomic write for plain text files (e.g. prompt.txt). Do NOT use
+// writeJsonAtomic here — that always JSON.stringifies, which would
+// wrap user text in quotes and escape characters.
+function writeTextAtomic(filePath, text) {
+  const dir = path.dirname(filePath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  const tmp = `${filePath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`
+  fs.writeFileSync(tmp, String(text ?? ''), 'utf-8')
+  fs.renameSync(tmp, filePath)
+}
+
 const __fileLocks = new Map()
 async function withFileLock(filePath, fn) {
   const key = path.resolve(filePath)
@@ -999,7 +1010,7 @@ app.post('/api/costumes', authMiddleware, (req, res) => {
     fs.mkdirSync(newFolderPath, { recursive: true })
 
     // Create prompt.txt (scene prompt)
-    writeJsonAtomic(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
+    writeTextAtomic(path.join(newFolderPath, 'prompt.txt'), prompt || '')
 
     // Create meta.json
     const meta = {
@@ -1049,7 +1060,7 @@ app.put('/api/costumes/:id', authMiddleware, (req, res) => {
 
     // Update prompt.txt (scene prompt)
     if (prompt !== undefined) {
-      writeJsonAtomic(promptPath, prompt, 'utf-8')
+      writeTextAtomic(promptPath, prompt)
     }
 
     // Update meta.json
@@ -1070,7 +1081,7 @@ app.put('/api/costumes/:id', authMiddleware, (req, res) => {
     if (stability !== undefined) meta.stability = stability
     if (author !== undefined) meta.author = author
 
-    fs.writeFileSync(metaPath, meta)
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json({ success: true, message: 'Costume updated successfully' })
@@ -2299,7 +2310,7 @@ app.post('/api/prompts', authMiddleware, (req, res) => {
     fs.mkdirSync(newFolderPath, { recursive: true })
 
     // Create prompt.txt
-    writeJsonAtomic(path.join(newFolderPath, 'prompt.txt'), prompt || '', 'utf-8')
+    writeTextAtomic(path.join(newFolderPath, 'prompt.txt'), prompt || '')
 
     // Create negative.txt if provided
     if (negativePrompt && negativePrompt.trim()) {
@@ -2391,7 +2402,7 @@ app.put('/api/prompts/:id', authMiddleware, (req, res) => {
 
     // Update prompt.txt
     if (prompt !== undefined) {
-      writeJsonAtomic(promptPath, prompt, 'utf-8')
+      writeTextAtomic(promptPath, prompt)
     }
 
     // Update negative.txt
@@ -2422,7 +2433,7 @@ app.put('/api/prompts/:id', authMiddleware, (req, res) => {
     if (author !== undefined) meta.author = author
     if (usedFnLoras !== undefined) meta.usedFnLoras = usedFnLoras
 
-    fs.writeFileSync(metaPath, meta)
+    writeJsonAtomic(metaPath, meta)
 
 
     res.json({ success: true, message: 'Prompt updated successfully' })

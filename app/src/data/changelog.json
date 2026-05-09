@@ -12,6 +12,11 @@
         "hash": "de8fd66",
         "type": "fix",
         "message": "New LoRA Discord notifications now include the preview image and show the model name correctly"
+      },
+      {
+        "hash": "5407696",
+        "type": "fix",
+        "message": "Fix updating costumes and prompts saving the wrong format"
       }
     ]
   },
