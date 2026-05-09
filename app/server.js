@@ -747,7 +747,7 @@ app.get('/api/costumes', async (req, res) => {
     
     // Save metadata if changed
     if (metadataChanged) {
-      fs.writeFileSync(metadataPath, metadata)
+      writeJsonAtomic(metadataPath, metadata)
     }
 
     res.json({ costumes, metadata })
@@ -1026,7 +1026,7 @@ app.post('/api/costumes', authMiddleware, (req, res) => {
       author: author || 'dANNY',
       copyCount: 0
     }
-    fs.writeFileSync(path.join(newFolderPath, 'meta.json'), meta)
+    writeJsonAtomic(path.join(newFolderPath, 'meta.json'), meta)
 
 
     sendDiscordNotification('new_costume', { ...meta, id: nextId.toString() })
@@ -2331,7 +2331,7 @@ app.post('/api/prompts', authMiddleware, (req, res) => {
       copyCount: 0,
       usedFnLoras: usedFnLoras || []
     }
-    fs.writeFileSync(path.join(newFolderPath, 'meta.json'), meta)
+    writeJsonAtomic(path.join(newFolderPath, 'meta.json'), meta)
 
 
     // Create placeholder images (1.png will be required to upload)

@@ -1,5 +1,15 @@
 [
   {
+    "date": "2026-05-10",
+    "changes": [
+      {
+        "hash": "1d7a4f1",
+        "type": "fix",
+        "message": "Fix creating costumes and prompts (server error on save)"
+      }
+    ]
+  },
+  {
     "date": "2026-05-09",
     "changes": [
       {
