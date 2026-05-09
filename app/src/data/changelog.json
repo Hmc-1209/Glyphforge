@@ -17,6 +17,12 @@
         "hash": "5407696",
         "type": "fix",
         "message": "Fix updating costumes and prompts saving the wrong format"
+      },
+      {
+        "hash": "fac2a5a",
+        "type": "refactor",
+        "message": "Move LoRA preview image to embed thumbnail position",
+        "hidden": true
       }
     ]
   },

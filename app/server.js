@@ -368,7 +368,7 @@ function buildDiscordEmbed(eventType, data) {
   if (description) embed.description = description
   if (fields.length) embed.fields = fields
   if (url) embed.url = url
-  if (embed_image_url) embed.image = { url: embed_image_url }
+  if (embed_image_url) embed.thumbnail = { url: embed_image_url }
 
   return {
     username: 'Glyphforge',
